@@ -9,7 +9,7 @@ It's a pure static site — no backend — so it hosts free on GitHub Pages and 
 YouTube Music has no official now-playing API, so this app reads your **Last.fm** feed:
 
 1. Create a free Last.fm account.
-2. Install the free [**Web Scrobbler**](https://web-scrobbler.com/) browser extension on any browser where you play YouTube Music. It detects YT Music playback and reports it to Last.fm in real time.
+2. Install the free **Web Scrobbler** browser extension ([Chrome/Edge/Brave](https://chromewebstore.google.com/detail/web-scrobbler/hhinaapppaileiechjoiifaancjggfjm) · [Firefox](https://addons.mozilla.org/en-US/firefox/addon/web-scrobbler/)) on any browser where you play YouTube Music. It detects YT Music playback and reports it to Last.fm in real time.
 3. Open this app, hit ⚙ **Settings**, and enter your Last.fm username + a free [API key](https://www.last.fm/api/account/create).
 
 The app polls Last.fm every 10s and reflects your current track on any device showing the page.
