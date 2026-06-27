@@ -50,6 +50,8 @@ const IDLE_DELAY_MS = 25000;            // keep last track up this long after it
    Last.fm polling
    ============================================================ */
 const POLL_MS = 10000;
+const STALL_RELOAD_MS = 150000;    // if no successful poll for 2.5 min, reload
+let lastPollOk = Date.now();        // timestamp of the last successful poll
 
 async function lastfm(method, params = {}) {
   if (!cfg.user || !cfg.key) return null;
@@ -57,17 +59,25 @@ async function lastfm(method, params = {}) {
   url.search = new URLSearchParams({
     method, api_key: cfg.key, format: "json", ...params,
   }).toString();
-  const res = await fetch(url);
-  if (!res.ok) throw new Error("Last.fm " + res.status);
-  return res.json();
+  // abort hung requests so polls can't pile up on a long-running kiosk tab
+  const ctrl = new AbortController();
+  const t = setTimeout(() => ctrl.abort(), 8000);
+  try {
+    const res = await fetch(url, { signal: ctrl.signal, cache: "no-store" });
+    if (!res.ok) throw new Error("Last.fm " + res.status);
+    return await res.json();
+  } finally {
+    clearTimeout(t);
+  }
 }
 
 async function poll() {
-  if (!cfg.user || !cfg.key) { showScreensaver(); return; }
+  if (!cfg.user || !cfg.key) { toScreensaver(); return; }
   try {
     const data = await lastfm("user.getRecentTracks", { user: cfg.user, limit: 8 });
     const tracks = data?.recenttracks?.track || [];
     const list = Array.isArray(tracks) ? tracks : [tracks];
+    lastPollOk = Date.now();
 
     // collect cover art for the mosaic
     artCache = list.map(t => pickImage(t.image)).filter(Boolean);
@@ -387,5 +397,16 @@ tickClock();
 setInterval(tickClock, 1000);
 poll();
 setInterval(poll, POLL_MS);
+
+// Kiosk resilience: poll immediately when the tab wakes, and if polling has
+// stalled for too long (network drop, browser throttling), reload the page.
+document.addEventListener("visibilitychange", () => {
+  if (!document.hidden) poll();
+});
+setInterval(() => {
+  if (cfg.user && cfg.key && Date.now() - lastPollOk > STALL_RELOAD_MS) {
+    location.reload();
+  }
+}, 30000);
 
 if (!cfg.user || !cfg.key) openSettings();
