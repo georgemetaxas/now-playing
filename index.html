@@ -15,7 +15,6 @@
   <!-- NOW PLAYING (full-bleed art) -->
   <main id="player">
     <img id="art" alt="" />
-    <iframe id="video" allow="autoplay; encrypted-media" allowfullscreen></iframe>
     <div id="shade"></div>
     <div id="meta">
       <div id="title-wrap"><h1 id="title"></h1></div>
@@ -36,8 +35,14 @@
 
   <!-- Controls -->
   <div id="controls">
-    <button id="layout-toggle" title="Full bleed / Album art">⊡ Bleed</button>
-    <button id="mode-toggle" title="Toggle art / video">◼ Art</button>
+    <div id="layout-toggle">
+      <button data-layout="fullbleed" title="Full bleed" aria-label="Full bleed">
+        <svg viewBox="0 0 20 20"><rect x="2" y="3.5" width="16" height="13" rx="2" fill="currentColor"/></svg>
+      </button>
+      <button data-layout="albumart" title="Album art" aria-label="Album art">
+        <svg viewBox="0 0 20 20"><rect x="2" y="3.5" width="16" height="13" rx="2" fill="none" stroke="currentColor" stroke-width="1.6"/><rect x="6" y="6.5" width="8" height="7" rx="1" fill="currentColor"/></svg>
+      </button>
+    </div>
     <button id="settings-btn" title="Settings">⚙</button>
     <button id="fs-btn" title="Fullscreen">⛶</button>
   </div>

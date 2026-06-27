@@ -26,18 +26,17 @@ function saveConfig() { localStorage.setItem(CFG_KEY, JSON.stringify(cfg)); }
    ============================================================ */
 const $ = (id) => document.getElementById(id);
 const els = {
-  backdrop: $("backdrop"), player: $("player"), art: $("art"), video: $("video"),
+  backdrop: $("backdrop"), player: $("player"), art: $("art"),
   title: $("title"), titleWrap: $("title-wrap"), subtitle: $("subtitle"),
   layoutToggle: $("layout-toggle"), screensaver: $("screensaver"),
   mosaic: $("mosaic"), clock: $("clock"), date: $("date"),
-  modeToggle: $("mode-toggle"), settings: $("settings"),
+  settings: $("settings"),
   cfgUser: $("cfg-user"), cfgKey: $("cfg-key"),
 };
 
 /* ============================================================
    State
    ============================================================ */
-let mode = cfg.mode || "art";          // "art" | "video"
 let currentKey = null;                  // identity of the track currently shown
 let artCache = [];                      // recent cover art URLs for the mosaic
 const yearCache = {};
@@ -102,7 +101,6 @@ async function showTrack(t) {
   const key = artist + " — " + title;
 
   toPlayer();
-  applyMode();
 
   if (key === currentKey) return; // same track, nothing to refresh
   currentKey = key;
@@ -130,9 +128,6 @@ async function showTrack(t) {
   // re-trigger entrance animation + scroll long titles
   retrigger(els.title); retrigger(els.subtitle);
   applyTitleScroll();
-
-  // load video for video mode
-  loadVideo(title, artist);
 }
 
 function retrigger(node) {
@@ -155,48 +150,18 @@ function applyTitleScroll() {
 }
 
 // Full-bleed vs album-art layout
+const layoutButtons = els.layoutToggle.querySelectorAll("button");
 function applyLayout() {
-  const album = layout === "albumart";
-  els.player.classList.toggle("albumart", album);
-  els.layoutToggle.textContent = album ? "⛶ Art" : "⊡ Bleed";
+  els.player.classList.toggle("albumart", layout === "albumart");
+  layoutButtons.forEach(b => b.classList.toggle("active", b.dataset.layout === layout));
   applyTitleScroll();
 }
-els.layoutToggle.addEventListener("click", () => {
-  layout = layout === "fullbleed" ? "albumart" : "fullbleed";
+layoutButtons.forEach(b => b.addEventListener("click", () => {
+  layout = b.dataset.layout;
   cfg.layout = layout; saveConfig();
   applyLayout();
-});
+}));
 
-/* ============================================================
-   Art / Video mode
-   ============================================================ */
-function applyMode() {
-  const video = mode === "video";
-  els.video.style.display = video ? "block" : "none";
-  els.art.style.display = video ? "none" : "block";
-  els.modeToggle.textContent = video ? "▶ Video" : "◼ Art";
-}
-
-function loadVideo(title, artist) {
-  if (mode !== "video") { els.video.src = "about:blank"; return; }
-  const q = encodeURIComponent(`${artist} ${title}`);
-  // listType=search plays the first YouTube result — no API key needed
-  els.video.src =
-    `https://www.youtube-nocookie.com/embed?listType=search&list=${q}` +
-    `&autoplay=1&mute=0&modestbranding=1&rel=0`;
-}
-
-els.modeToggle.addEventListener("click", () => {
-  mode = mode === "art" ? "video" : "art";
-  cfg.mode = mode; saveConfig();
-  applyMode();
-  if (mode === "video" && currentKey) {
-    const [artist, title] = currentKey.split(" — ");
-    loadVideo(title, artist);
-  } else {
-    els.video.src = "about:blank";
-  }
-});
 
 /* ============================================================
    High-res artwork + year via iTunes Search (free, no key)
@@ -353,7 +318,6 @@ function toPlayer() {
 function toScreensaver() {
   view = "screensaver";
   currentKey = null;
-  els.video.src = "about:blank";
   setAccent(null);
   buildMosaic();
   els.player.classList.remove("visible");
@@ -417,7 +381,6 @@ $("fs-btn").addEventListener("click", () => {
 /* ============================================================
    Boot
    ============================================================ */
-applyMode();
 applyLayout();
 toScreensaver();
 tickClock();

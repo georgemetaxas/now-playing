@@ -47,11 +47,6 @@ body:hover { cursor: default; }
   object-fit: cover;
   animation: fadein .8s ease;
 }
-#video {
-  position: absolute; inset: 0;
-  width: 100%; height: 100%;
-  border: 0; background: #000;
-}
 #shade {
   position: absolute; inset: 0;
   background: linear-gradient(to top, rgba(0,0,0,.78) 0%, rgba(0,0,0,.25) 28%, transparent 50%);
@@ -138,6 +133,25 @@ body:hover #controls { opacity: 1; }
   backdrop-filter: blur(12px);
 }
 #controls button:hover { background: rgba(255,255,255,.22); }
+
+/* segmented full-bleed / album-art control with an active state */
+#layout-toggle {
+  display: inline-flex; gap: 2px;
+  background: rgba(255,255,255,.12);
+  border-radius: 22px; overflow: hidden;
+  backdrop-filter: blur(12px);
+}
+#layout-toggle button {
+  background: transparent; border: 0;
+  height: 44px; width: 46px; padding: 0;
+  display: grid; place-items: center;
+  color: #fff; opacity: .45; cursor: pointer;
+  border-radius: 0; min-width: 0;
+  transition: opacity .2s ease, background .2s ease;
+}
+#layout-toggle button svg { width: 19px; height: 19px; }
+#layout-toggle button:hover { opacity: .8; background: transparent; }
+#layout-toggle button.active { opacity: 1; background: rgba(255,255,255,.22); }
 
 /* ---- Settings ---- */
 #settings {
