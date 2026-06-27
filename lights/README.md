@@ -49,7 +49,25 @@ Fill in `config.json`:
 You'll see lines like `♪ Mindchatter — Here I Go Again  →  hue 320°, sat 88%`.
 Press Ctrl-C to stop.
 
-### Keep it running
+### Keep it running automatically (launchd)
 
-To launch it automatically on the Mac, run it via a `launchd` agent (ask Claude to
-generate a `.plist`), or simply keep a terminal tab open with the command above.
+A launch agent is included so the sync starts on login and restarts if it
+crashes. After `config.json` is filled in:
+
+```bash
+# from the repo root
+cp lights/com.metaxas.nowplaying-lights.plist ~/Library/LaunchAgents/
+launchctl load ~/Library/LaunchAgents/com.metaxas.nowplaying-lights.plist
+```
+
+Manage it:
+
+```bash
+launchctl list | grep nowplaying-lights        # is it running?
+tail -f lights/tapo_sync.log                    # watch output
+launchctl unload ~/Library/LaunchAgents/com.metaxas.nowplaying-lights.plist   # stop
+```
+
+After editing `config.json`, reload with `unload` then `load` to pick up changes.
+The agent uses absolute paths to this folder — if you move the project, update the
+paths in the `.plist` (and the copy in `~/Library/LaunchAgents/`).

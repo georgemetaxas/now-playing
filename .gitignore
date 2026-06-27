@@ -4,5 +4,6 @@ node_modules/
 # Tapo light helper — never commit secrets or the venv
 lights/config.json
 lights/.venv/
+lights/tapo_sync.log
 __pycache__/
 
