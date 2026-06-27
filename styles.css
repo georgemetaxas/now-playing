@@ -1,0 +1,143 @@
+:root {
+  --bg: #000;
+  --text: #fff;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Inter, system-ui, sans-serif;
+}
+
+* { box-sizing: border-box; margin: 0; padding: 0; }
+
+html, body {
+  width: 100%; height: 100%;
+  background: var(--bg);
+  color: var(--text);
+  overflow: hidden;
+  cursor: none; /* hide cursor on standalone display */
+}
+body:hover { cursor: default; }
+
+.hidden { display: none !important; }
+
+/* ---- Ambient backdrop ---- */
+#backdrop {
+  position: fixed; inset: -10%;
+  background-size: cover; background-position: center;
+  filter: blur(80px) saturate(1.4) brightness(0.7);
+  transform: scale(1.2);
+  transition: background-image .8s ease;
+  z-index: 0;
+}
+#vignette {
+  position: fixed; inset: 0; z-index: 1;
+  background: radial-gradient(ellipse at center, transparent 30%, rgba(0,0,0,.55) 100%);
+}
+
+/* ---- Player (full-bleed art) ---- */
+#player { position: fixed; inset: 0; z-index: 2; }
+
+#art {
+  position: absolute; inset: 0;
+  width: 100%; height: 100%;
+  object-fit: cover;
+  animation: fadein .8s ease;
+}
+#video {
+  position: absolute; inset: 0;
+  width: 100%; height: 100%;
+  border: 0; background: #000;
+}
+#shade {
+  position: absolute; inset: 0;
+  background: linear-gradient(to top, rgba(0,0,0,.78) 0%, rgba(0,0,0,.25) 28%, transparent 50%);
+  pointer-events: none;
+}
+#meta {
+  position: absolute; left: 4.5vw; bottom: 6vh; right: 4.5vw;
+  text-shadow: 0 2px 24px rgba(0,0,0,.6);
+}
+#title {
+  font-size: clamp(28px, 5vw, 64px);
+  font-weight: 800; letter-spacing: -0.02em;
+  line-height: 1.05;
+  animation: rise .6s ease both;
+}
+#subtitle {
+  margin-top: .4em;
+  font-size: clamp(15px, 2vw, 26px);
+  font-weight: 500; opacity: .85;
+  animation: rise .6s .08s ease both;
+}
+
+/* ---- Screensaver ---- */
+#screensaver { position: fixed; inset: 0; z-index: 2; }
+#mosaic {
+  position: absolute; inset: 0;
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+  grid-auto-rows: 1fr;
+  filter: saturate(1.1);
+}
+#mosaic div {
+  background-size: cover; background-position: center;
+  animation: fadein 1.2s ease both;
+}
+#ss-dim { position: absolute; inset: 0; background: rgba(5,5,7,.74); }
+#ss-center {
+  position: absolute; inset: 0;
+  display: flex; flex-direction: column; align-items: center; justify-content: center;
+  text-align: center;
+}
+#clock {
+  font-size: clamp(64px, 15vw, 180px);
+  font-weight: 800; letter-spacing: -0.03em;
+  font-variant-numeric: tabular-nums;
+}
+#date { margin-top: .1em; font-size: clamp(16px, 2.4vw, 30px); font-weight: 500; opacity: .7; }
+#idle { margin-top: 1.2em; font-size: clamp(13px, 1.6vw, 18px); font-weight: 500; opacity: .4; }
+
+/* ---- Controls ---- */
+#controls {
+  position: fixed; top: 18px; right: 18px; z-index: 10;
+  display: flex; gap: 10px;
+  opacity: 0; transition: opacity .3s ease;
+}
+body:hover #controls { opacity: 1; }
+#controls button {
+  background: rgba(255,255,255,.12);
+  color: #fff; border: 0; border-radius: 22px;
+  height: 44px; min-width: 44px; padding: 0 16px;
+  font-size: 15px; font-weight: 600; cursor: pointer;
+  backdrop-filter: blur(12px);
+}
+#controls button:hover { background: rgba(255,255,255,.22); }
+
+/* ---- Settings ---- */
+#settings {
+  position: fixed; inset: 0; z-index: 20;
+  display: flex; align-items: center; justify-content: center;
+  background: rgba(0,0,0,.6); backdrop-filter: blur(8px);
+}
+.panel {
+  width: min(440px, 90vw);
+  background: #15151b; border: 1px solid rgba(255,255,255,.1);
+  border-radius: 18px; padding: 28px;
+  display: flex; flex-direction: column; gap: 18px;
+}
+.panel h2 { font-size: 22px; }
+.panel label { display: flex; flex-direction: column; gap: 6px; font-size: 14px; font-weight: 600; opacity: .9; }
+.panel input {
+  background: #0c0c10; border: 1px solid rgba(255,255,255,.14);
+  border-radius: 10px; padding: 12px 14px; color: #fff; font-size: 15px;
+}
+.panel small { font-weight: 400; opacity: .6; }
+.panel small a, .panel .hint a { color: #ec4899; }
+.row { display: flex; gap: 10px; }
+.panel button {
+  flex: 1; border: 0; border-radius: 10px; padding: 12px;
+  font-size: 15px; font-weight: 600; cursor: pointer;
+  background: rgba(255,255,255,.1); color: #fff;
+}
+.panel button.primary { background: #ec4899; }
+.hint { font-size: 13px; opacity: .6; line-height: 1.5; }
+
+@keyframes fadein { from { opacity: 0; } to { opacity: 1; } }
+@keyframes rise { from { opacity: 0; transform: translateY(16px); } to { opacity: 1; transform: none; } }
