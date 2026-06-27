@@ -409,4 +409,16 @@ setInterval(() => {
   }
 }, 30000);
 
+// Live dot: faint pulse while polling is healthy, solid red if it has stalled.
+// (Healthy dot + frozen art means the scrobbler went quiet — reload YT Music.)
+const liveDot = $("live-dot");
+function updateLiveDot() {
+  const configured = !!(cfg.user && cfg.key);
+  const healthy = configured && (Date.now() - lastPollOk < 25000);
+  liveDot.classList.toggle("live", healthy);
+  liveDot.classList.toggle("stale", configured && !healthy);
+}
+updateLiveDot();
+setInterval(updateLiveDot, 5000);
+
 if (!cfg.user || !cfg.key) openSettings();

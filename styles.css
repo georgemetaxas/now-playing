@@ -17,6 +17,18 @@ body:hover { cursor: default; }
 
 .hidden { display: none !important; }
 
+/* ---- Live feed status dot ---- */
+#live-dot {
+  position: fixed; top: 16px; left: 16px; z-index: 10;
+  width: 9px; height: 9px; border-radius: 50%;
+  background: #43c463; opacity: 0;
+  transition: opacity .5s ease, background .5s ease;
+  pointer-events: none;
+}
+#live-dot.live { animation: livepulse 2.6s ease-in-out infinite; }
+#live-dot.stale { background: #e0533b; opacity: .6; animation: none; }
+@keyframes livepulse { 0%,100% { opacity: .12; } 50% { opacity: .4; } }
+
 /* ---- Ambient backdrop ---- */
 #backdrop {
   position: fixed; inset: -10%;
