@@ -1,0 +1,14 @@
+{
+  "tapo_email": "your-tplink-account@email.com",
+  "tapo_password": "your-tplink-account-password",
+  "strip_ip": "192.168.1.50",
+  "model": "l930",
+
+  "lastfm_user": "gogom222",
+  "lastfm_key": "7e6ab4d4806c231978b21444a58f5f7e",
+
+  "poll_seconds": 8,
+  "brightness": 80,
+  "idle_mode": "dim",
+  "idle_brightness": 15
+}

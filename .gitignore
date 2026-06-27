@@ -1,2 +1,8 @@
 node_modules/
 .DS_Store
+
+# Tapo light helper — never commit secrets or the venv
+lights/config.json
+lights/.venv/
+__pycache__/
+
