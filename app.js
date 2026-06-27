@@ -16,7 +16,7 @@ const cfg = loadConfig();
 function loadConfig() {
   let stored = {};
   try { stored = JSON.parse(localStorage.getItem(CFG_KEY)) || {}; }
-  catch { stored = {}; }
+  catch (e) { stored = {}; }
   return { ...DEFAULTS, ...stored };
 }
 function saveConfig() { localStorage.setItem(CFG_KEY, JSON.stringify(cfg)); }
@@ -213,7 +213,7 @@ function applyAccent(artUrl) {
         if (score > bestScore) { bestScore = score; best = [r, g, b]; }
       }
       setAccent(best ? vividHex(best) : null);
-    } catch { setAccent(null); }            // tainted canvas → white
+    } catch (e) { setAccent(null); }            // tainted canvas → white
   };
   img.onerror = () => setAccent(null);
   img.src = proxied;
@@ -283,7 +283,7 @@ async function fetchItunes(artist, title, album) {
           durationMs: r.trackTimeMillis || 0,
         };
       }
-    } catch {}
+    } catch (e) {}
   }
   return { art: null, year: "", durationMs: 0 };
 }
@@ -300,7 +300,7 @@ async function fetchYear(artist, title, album) {
     const wiki = info && info.track && info.track.wiki && info.track.wiki.published; // e.g. "06 Sep 2011, 14:00"
     const m = wiki && wiki.match(/\b(19|20)\d{2}\b/);
     if (m) year = m[0];
-  } catch {}
+  } catch (e) {}
   if (!year) {
     try {
       const q = encodeURIComponent(`recording:"${title}" AND artist:"${artist}"`);
@@ -309,7 +309,7 @@ async function fetchYear(artist, title, album) {
       const j = await res.json();
       const date = j && j.recordings && j.recordings[0] && j.recordings[0]["first-release-date"];
       if (date) year = date.slice(0, 4);
-    } catch {}
+    } catch (e) {}
   }
   yearCache[ck] = year;
   return year;
