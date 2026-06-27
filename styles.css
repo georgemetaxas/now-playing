@@ -54,11 +54,31 @@ body:hover { cursor: default; }
   position: absolute; left: 4.5vw; bottom: 6vh; right: 4.5vw;
   text-shadow: 0 2px 24px rgba(0,0,0,.6);
 }
+#title-wrap { overflow: hidden; max-width: 91vw; }
 #title {
+  display: inline-block;
+  white-space: nowrap;
   font-size: clamp(28px, 5vw, 64px);
   font-weight: 800; letter-spacing: -0.02em;
-  line-height: 1.05;
+  line-height: 1.1;
   animation: rise .6s ease both;
+}
+#title.scroll { animation: rise .6s ease both, marquee 14s linear 1s infinite alternate; }
+@keyframes marquee {
+  from { transform: translateX(0); }
+  to   { transform: translateX(calc(var(--scroll-dist, 0px) * -1)); }
+}
+
+#progress {
+  margin-top: 1.2em;
+  height: 4px; width: min(440px, 62vw);
+  background: rgba(255,255,255,.2);
+  border-radius: 2px; overflow: hidden;
+  opacity: 0; transition: opacity .4s ease;
+}
+#progress-fill {
+  height: 100%; width: 0%;
+  background: #fff; border-radius: 2px;
 }
 #subtitle {
   margin-top: .4em;

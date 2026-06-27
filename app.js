@@ -27,7 +27,8 @@ function saveConfig() { localStorage.setItem(CFG_KEY, JSON.stringify(cfg)); }
 const $ = (id) => document.getElementById(id);
 const els = {
   backdrop: $("backdrop"), player: $("player"), art: $("art"), video: $("video"),
-  title: $("title"), subtitle: $("subtitle"), screensaver: $("screensaver"),
+  title: $("title"), titleWrap: $("title-wrap"), subtitle: $("subtitle"),
+  progress: $("progress"), progressFill: $("progress-fill"), screensaver: $("screensaver"),
   mosaic: $("mosaic"), clock: $("clock"), date: $("date"),
   modeToggle: $("mode-toggle"), settings: $("settings"),
   cfgUser: $("cfg-user"), cfgKey: $("cfg-key"),
@@ -40,6 +41,8 @@ let mode = cfg.mode || "art";          // "art" | "video"
 let currentKey = null;                  // identity of the track currently shown
 let artCache = [];                      // recent cover art URLs for the mosaic
 const yearCache = {};
+let trackStart = 0;                     // when current track first appeared (perf time)
+let trackDurMs = 0;                     // iTunes-reported duration, 0 = unknown
 
 /* ============================================================
    Last.fm polling
@@ -121,8 +124,13 @@ async function showTrack(t) {
   if (!year) year = await fetchYear(artist, title, album);
   els.subtitle.textContent = [artist, year].filter(Boolean).join(" · ");
 
-  // re-trigger entrance animation
+  // estimated progress for this track
+  trackDurMs = itunes.durationMs || 0;
+  trackStart = performance.now();
+
+  // re-trigger entrance animation + scroll long titles
   retrigger(els.title); retrigger(els.subtitle);
+  applyTitleScroll();
 
   // load video for video mode
   loadVideo(title, artist);
@@ -132,6 +140,32 @@ function retrigger(node) {
   node.style.animation = "none";
   void node.offsetWidth;
   node.style.animation = "";
+}
+
+// Marquee long titles that overflow their container
+function applyTitleScroll() {
+  els.title.classList.remove("scroll");
+  els.title.style.removeProperty("--scroll-dist");
+  requestAnimationFrame(() => {
+    const overflow = els.title.scrollWidth - els.titleWrap.clientWidth;
+    if (overflow > 4) {
+      els.title.style.setProperty("--scroll-dist", overflow + 24 + "px");
+      els.title.classList.add("scroll");
+    }
+  });
+}
+
+// Estimated playback progress bar (Last.fm gives no real position)
+function tickProgress() {
+  const playing = !els.player.classList.contains("hidden") && mode === "art";
+  if (playing && trackDurMs > 0) {
+    const frac = Math.min(1, (performance.now() - trackStart) / trackDurMs);
+    els.progressFill.style.width = (frac * 100) + "%";
+    els.progress.style.opacity = "1";
+  } else {
+    els.progress.style.opacity = "0";
+  }
+  requestAnimationFrame(tickProgress);
 }
 
 /* ============================================================
@@ -195,11 +229,12 @@ async function fetchItunes(artist, title, album) {
         return {
           art: r.artworkUrl100.replace("100x100bb", "1000x1000bb"),
           year: r.releaseDate ? r.releaseDate.slice(0, 4) : "",
+          durationMs: r.trackTimeMillis || 0,
         };
       }
     } catch {}
   }
-  return { art: null, year: "" };
+  return { art: null, year: "", durationMs: 0 };
 }
 
 /* ============================================================
@@ -292,6 +327,7 @@ $("fs-btn").addEventListener("click", () => {
 applyMode();
 tickClock();
 setInterval(tickClock, 1000);
+requestAnimationFrame(tickProgress);
 poll();
 setInterval(poll, POLL_MS);
 
