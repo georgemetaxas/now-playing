@@ -4,11 +4,20 @@
    Config (stored in localStorage)
    ============================================================ */
 const CFG_KEY = "ynp-config";
+
+// Built-in defaults (Last.fm read API key is safe to expose client-side).
+const DEFAULTS = {
+  user: "gogom222",
+  key: "7e6ab4d4806c231978b21444a58f5f7e",
+};
+
 const cfg = loadConfig();
 
 function loadConfig() {
-  try { return JSON.parse(localStorage.getItem(CFG_KEY)) || {}; }
-  catch { return {}; }
+  let stored = {};
+  try { stored = JSON.parse(localStorage.getItem(CFG_KEY)) || {}; }
+  catch { stored = {}; }
+  return { ...DEFAULTS, ...stored };
 }
 function saveConfig() { localStorage.setItem(CFG_KEY, JSON.stringify(cfg)); }
 
@@ -94,17 +103,22 @@ async function showTrack(t) {
   if (key === currentKey) return; // same track, nothing to refresh
   currentKey = key;
 
-  // high-res art (iTunes fallback), else Last.fm art
+  // iTunes lookup gives both high-res art and a release year
+  const itunes = await fetchItunes(artist, title, album);
   const lfArt = pickImage(t.image);
-  const hi = await fetchHiResArt(artist, album || title) || lfArt || "";
-  if (hi) {
-    els.art.src = hi;
-    els.backdrop.style.backgroundImage = `url("${hi}")`;
+  const art = itunes.art || (isPlaceholderArt(lfArt) ? "" : lfArt) || "";
+  if (art) {
+    els.art.src = art;
+    els.backdrop.style.backgroundImage = `url("${art}")`;
+  } else {
+    els.art.removeAttribute("src");
+    els.backdrop.style.backgroundImage = "";
   }
 
   // text
   els.title.textContent = title;
-  const year = await fetchYear(artist, title, album);
+  let year = itunes.year;
+  if (!year) year = await fetchYear(artist, title, album);
   els.subtitle.textContent = [artist, year].filter(Boolean).join(" · ");
 
   // re-trigger entrance animation
@@ -152,21 +166,40 @@ els.modeToggle.addEventListener("click", () => {
 });
 
 /* ============================================================
-   High-res artwork via iTunes Search (free, no key)
+   High-res artwork + year via iTunes Search (free, no key)
+   Tries title first, then album — "feat." strings often fail.
    ============================================================ */
-async function fetchHiResArt(artist, term) {
-  if (!artist || !term) return null;
-  try {
-    const url = new URL("https://itunes.apple.com/search");
-    url.search = new URLSearchParams({
-      term: `${artist} ${term}`, entity: "song", limit: "1",
-    }).toString();
-    const res = await fetch(url);
-    const j = await res.json();
-    const art = j?.results?.[0]?.artworkUrl100;
-    if (art) return art.replace("100x100bb", "1000x1000bb");
-  } catch {}
-  return null;
+const LASTFM_PLACEHOLDER = "2a96cbd8b46e442fc41c2b86b821562f";
+function isPlaceholderArt(url) {
+  return !url || url.includes(LASTFM_PLACEHOLDER);
+}
+
+async function fetchItunes(artist, title, album) {
+  const cleanAlbum = (album || "").replace(/\s*\(feat\.[^)]*\)/i, "").trim();
+  const terms = [
+    `${artist} ${title}`,
+    cleanAlbum && `${artist} ${cleanAlbum}`,
+    title,
+  ].filter(Boolean);
+
+  for (const term of terms) {
+    try {
+      const url = new URL("https://itunes.apple.com/search");
+      url.search = new URLSearchParams({
+        term, entity: "song", limit: "1",
+      }).toString();
+      const res = await fetch(url);
+      const j = await res.json();
+      const r = j?.results?.[0];
+      if (r?.artworkUrl100) {
+        return {
+          art: r.artworkUrl100.replace("100x100bb", "1000x1000bb"),
+          year: r.releaseDate ? r.releaseDate.slice(0, 4) : "",
+        };
+      }
+    } catch {}
+  }
+  return { art: null, year: "" };
 }
 
 /* ============================================================
