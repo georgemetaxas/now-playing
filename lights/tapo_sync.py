@@ -188,12 +188,17 @@ async def main():
                     last_key = None
                     print("· nothing playing → idle")
         except Exception as e:
-            print(f"! {type(e).__name__}: {e}", file=sys.stderr)
-            # try to re-establish the device handle on persistent errors
+            # Tapo sessions expire (SessionTimeout/403) — a fresh handle isn't
+            # enough, so log in again from scratch and re-apply on next loop.
+            print(f"! {type(e).__name__}: {e}  → re-authenticating", file=sys.stderr)
             try:
+                client = ApiClient(cfg["tapo_email"], cfg["tapo_password"])
                 device = await get_device(client, cfg)
-            except Exception:
-                pass
+                last_key = None       # force the colour to be re-applied
+                idle_set = False
+                print("· reconnected to strip")
+            except Exception as e2:
+                print(f"! reconnect failed: {e2}", file=sys.stderr)
 
         await asyncio.sleep(cfg["poll_seconds"])
 
