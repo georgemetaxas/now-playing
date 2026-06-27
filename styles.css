@@ -31,6 +31,13 @@ body:hover { cursor: default; }
   background: radial-gradient(ellipse at center, transparent 30%, rgba(0,0,0,.55) 100%);
 }
 
+/* ---- Crossfade between player and screensaver ---- */
+#player, #screensaver {
+  opacity: 0; visibility: hidden;
+  transition: opacity .9s ease, visibility .9s ease;
+}
+#player.visible, #screensaver.visible { opacity: 1; visibility: visible; }
+
 /* ---- Player (full-bleed art) ---- */
 #player { position: fixed; inset: 0; z-index: 2; }
 
@@ -61,6 +68,8 @@ body:hover { cursor: default; }
   font-size: clamp(28px, 5vw, 64px);
   font-weight: 800; letter-spacing: -0.02em;
   line-height: 1.1;
+  color: var(--accent, #fff);
+  transition: color .6s ease;
   animation: rise .6s ease both;
 }
 #title.scroll { animation: rise .6s ease both, marquee 14s linear 1s infinite alternate; }
@@ -78,7 +87,8 @@ body:hover { cursor: default; }
 }
 #progress-fill {
   height: 100%; width: 0%;
-  background: #fff; border-radius: 2px;
+  background: var(--accent, #fff); border-radius: 2px;
+  transition: background .6s ease;
 }
 #subtitle {
   margin-top: .4em;

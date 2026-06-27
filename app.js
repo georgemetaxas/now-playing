@@ -43,6 +43,10 @@ let artCache = [];                      // recent cover art URLs for the mosaic
 const yearCache = {};
 let trackStart = 0;                     // when current track first appeared (perf time)
 let trackDurMs = 0;                     // iTunes-reported duration, 0 = unknown
+let view = "screensaver";               // "player" | "screensaver"
+let idleTimer = null;                   // grace timer before falling back to screensaver
+
+const IDLE_DELAY_MS = 25000;            // keep last track up this long after it stops
 
 /* ============================================================
    Last.fm polling
@@ -71,8 +75,8 @@ async function poll() {
     artCache = list.map(t => pickImage(t.image)).filter(Boolean);
 
     const now = list.find(t => t["@attr"] && t["@attr"].nowplaying === "true");
-    if (now) await showTrack(now);
-    else showScreensaver();
+    if (now) { clearIdle(); await showTrack(now); }
+    else scheduleIdle();
   } catch (e) {
     console.error(e);
   }
@@ -98,9 +102,7 @@ async function showTrack(t) {
   const album = (t.album && t.album["#text"]) || "";
   const key = artist + " — " + title;
 
-  els.screensaver.classList.add("hidden");
-  els.player.classList.remove("hidden");
-
+  toPlayer();
   applyMode();
 
   if (key === currentKey) return; // same track, nothing to refresh
@@ -113,9 +115,11 @@ async function showTrack(t) {
   if (art) {
     els.art.src = art;
     els.backdrop.style.backgroundImage = `url("${art}")`;
+    applyAccent(art);
   } else {
     els.art.removeAttribute("src");
     els.backdrop.style.backgroundImage = "";
+    setAccent(null);
   }
 
   // text
@@ -157,7 +161,7 @@ function applyTitleScroll() {
 
 // Estimated playback progress bar (Last.fm gives no real position)
 function tickProgress() {
-  const playing = !els.player.classList.contains("hidden") && mode === "art";
+  const playing = view === "player" && mode === "art";
   if (playing && trackDurMs > 0) {
     const frac = Math.min(1, (performance.now() - trackStart) / trackDurMs);
     els.progressFill.style.width = (frac * 100) + "%";
@@ -206,6 +210,83 @@ els.modeToggle.addEventListener("click", () => {
 const LASTFM_PLACEHOLDER = "2a96cbd8b46e442fc41c2b86b821562f";
 function isPlaceholderArt(url) {
   return !url || url.includes(LASTFM_PLACEHOLDER);
+}
+
+/* ============================================================
+   Accent color extracted from cover art (tints title + bar)
+   Reads pixels via a CORS-enabled image proxy (weserv), then
+   picks the most vivid colour and lightens it for legibility.
+   Falls back to white if extraction fails.
+   ============================================================ */
+function setAccent(hex) {
+  document.documentElement.style.setProperty("--accent", hex || "#fff");
+}
+
+function applyAccent(artUrl) {
+  const proxied = "https://images.weserv.nl/?w=40&h=40&url=" +
+    encodeURIComponent(artUrl.replace(/^https?:\/\//, ""));
+  const img = new Image();
+  img.crossOrigin = "anonymous";
+  img.onload = () => {
+    try {
+      const s = 40, cv = document.createElement("canvas");
+      cv.width = s; cv.height = s;
+      const ctx = cv.getContext("2d");
+      ctx.drawImage(img, 0, 0, s, s);
+      const d = ctx.getImageData(0, 0, s, s).data;
+      let best = null, bestScore = -1;
+      for (let i = 0; i < d.length; i += 4) {
+        const r = d[i], g = d[i + 1], b = d[i + 2];
+        const mx = Math.max(r, g, b), mn = Math.min(r, g, b);
+        const sat = mx === 0 ? 0 : (mx - mn) / mx;
+        const score = sat * mx;            // vivid AND bright
+        if (score > bestScore) { bestScore = score; best = [r, g, b]; }
+      }
+      setAccent(best ? vividHex(best) : null);
+    } catch { setAccent(null); }            // tainted canvas → white
+  };
+  img.onerror = () => setAccent(null);
+  img.src = proxied;
+}
+
+function vividHex([r, g, b]) {
+  let [h, s, l] = rgbToHsl(r, g, b);
+  if (s < 0.12) return "#fff";              // near-grayscale art → keep white
+  s = Math.min(0.95, Math.max(0.6, s));
+  l = 0.72;                                 // bright enough for text on dark
+  return rgbToHex(hslToRgb(h, s, l));
+}
+
+function rgbToHsl(r, g, b) {
+  r /= 255; g /= 255; b /= 255;
+  const mx = Math.max(r, g, b), mn = Math.min(r, g, b);
+  let h = 0, s = 0, l = (mx + mn) / 2;
+  if (mx !== mn) {
+    const d = mx - mn;
+    s = l > 0.5 ? d / (2 - mx - mn) : d / (mx + mn);
+    if (mx === r) h = (g - b) / d + (g < b ? 6 : 0);
+    else if (mx === g) h = (b - r) / d + 2;
+    else h = (r - g) / d + 4;
+    h /= 6;
+  }
+  return [h, s, l];
+}
+function hslToRgb(h, s, l) {
+  if (s === 0) { const v = Math.round(l * 255); return [v, v, v]; }
+  const hue = (p, q, t) => {
+    if (t < 0) t += 1; if (t > 1) t -= 1;
+    if (t < 1 / 6) return p + (q - p) * 6 * t;
+    if (t < 1 / 2) return q;
+    if (t < 2 / 3) return p + (q - p) * (2 / 3 - t) * 6;
+    return p;
+  };
+  const q = l < 0.5 ? l * (1 + s) : l + s - l * s;
+  const p = 2 * l - q;
+  return [hue(p, q, h + 1 / 3), hue(p, q, h), hue(p, q, h - 1 / 3)]
+    .map(x => Math.round(x * 255));
+}
+function rgbToHex([r, g, b]) {
+  return "#" + [r, g, b].map(x => x.toString(16).padStart(2, "0")).join("");
 }
 
 async function fetchItunes(artist, title, album) {
@@ -267,12 +348,29 @@ async function fetchYear(artist, title, album) {
 /* ============================================================
    Screensaver
    ============================================================ */
-function showScreensaver() {
+/* ---- View transitions (crossfade) + idle grace timer ---- */
+function toPlayer() {
+  view = "player";
+  els.screensaver.classList.remove("visible");
+  els.player.classList.add("visible");
+}
+
+function toScreensaver() {
+  view = "screensaver";
   currentKey = null;
   els.video.src = "about:blank";
-  els.player.classList.add("hidden");
-  els.screensaver.classList.remove("hidden");
+  setAccent(null);
   buildMosaic();
+  els.player.classList.remove("visible");
+  els.screensaver.classList.add("visible");
+}
+
+function scheduleIdle() {
+  if (view === "screensaver" || idleTimer) return; // already idle or counting down
+  idleTimer = setTimeout(() => { idleTimer = null; toScreensaver(); }, IDLE_DELAY_MS);
+}
+function clearIdle() {
+  if (idleTimer) { clearTimeout(idleTimer); idleTimer = null; }
 }
 
 function buildMosaic() {
@@ -325,6 +423,7 @@ $("fs-btn").addEventListener("click", () => {
    Boot
    ============================================================ */
 applyMode();
+toScreensaver();
 tickClock();
 setInterval(tickClock, 1000);
 requestAnimationFrame(tickProgress);
