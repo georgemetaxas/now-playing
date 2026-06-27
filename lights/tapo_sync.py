@@ -24,6 +24,13 @@ from tapo import ApiClient
 HERE = os.path.dirname(os.path.abspath(__file__))
 LASTFM_PLACEHOLDER = "2a96cbd8b46e442fc41c2b86b821562f"
 
+# flush each log line immediately (so the launchd log file stays live)
+try:
+    sys.stdout.reconfigure(line_buffering=True)
+    sys.stderr.reconfigure(line_buffering=True)
+except Exception:
+    pass
+
 
 # ----------------------------------------------------------------------------
 # Config
@@ -35,8 +42,9 @@ def load_config():
     with open(path) as f:
         cfg = json.load(f)
     # env overrides (handy for secrets)
-    cfg["tapo_email"] = os.environ.get("TAPO_EMAIL", cfg.get("tapo_email", ""))
-    cfg["tapo_password"] = os.environ.get("TAPO_PASSWORD", cfg.get("tapo_password", ""))
+    cfg["tapo_email"] = os.environ.get("TAPO_EMAIL", cfg.get("tapo_email", "")).strip()
+    cfg["tapo_password"] = os.environ.get("TAPO_PASSWORD", cfg.get("tapo_password", "")).strip()
+    cfg["strip_ip"] = str(cfg.get("strip_ip", "")).strip()
     for key in ("tapo_email", "tapo_password", "strip_ip", "lastfm_user", "lastfm_key"):
         if not cfg.get(key):
             sys.exit(f"config.json is missing required field: {key}")
