@@ -49,8 +49,11 @@ const IDLE_DELAY_MS = 25000;            // keep last track up this long after it
 /* ============================================================
    Last.fm polling
    ============================================================ */
-const POLL_MS = 10000;
+const POLL_MS = 7000;
 const STALL_RELOAD_MS = 150000;    // if no successful poll for 2.5 min, reload
+// Smaller artwork on phones/tablets — decodes far faster on older GPUs
+const ART_SIZE = (("ontouchstart" in window) || window.innerWidth < 900)
+  ? "600x600bb" : "1000x1000bb";
 let lastPollOk = Date.now();        // timestamp of the last successful poll
 
 async function lastfm(method, params = {}) {
@@ -116,29 +119,40 @@ async function showTrack(t) {
   if (key === currentKey) return; // same track, nothing to refresh
   currentKey = key;
 
-  // iTunes lookup gives both high-res art and a release year
-  const itunes = await fetchItunes(artist, title, album);
+  // 1) Update text (and any Last.fm art) IMMEDIATELY so the change feels
+  //    instant even on slow hardware. Hi-res art + year are filled in after.
+  els.title.textContent = title;
+  els.subtitle.textContent = artist;
+  retrigger(els.title); retrigger(els.subtitle);
+  applyTitleScroll();
+
   const lfArt = pickImage(t.image);
+  if (lfArt && !isPlaceholderArt(lfArt)) {
+    els.art.src = lfArt;
+    els.backdrop.style.backgroundImage = `url("${lfArt}")`;
+    applyAccent(lfArt);
+  }
+
+  // 2) Fetch hi-res art + release year in the background. Bail out if the
+  //    track has changed again while we were waiting (avoids stale updates).
+  const itunes = await fetchItunes(artist, title, album);
+  if (currentKey !== key) return;
+
   const art = itunes.art || (isPlaceholderArt(lfArt) ? "" : lfArt) || "";
   if (art) {
     els.art.src = art;
     els.backdrop.style.backgroundImage = `url("${art}")`;
     applyAccent(art);
-  } else {
+  } else if (isPlaceholderArt(lfArt)) {
     els.art.removeAttribute("src");
     els.backdrop.style.backgroundImage = "";
     setAccent(null);
   }
 
-  // text
-  els.title.textContent = title;
   let year = itunes.year;
   if (!year) year = await fetchYear(artist, title, album);
+  if (currentKey !== key) return;
   els.subtitle.textContent = [artist, year].filter(Boolean).join(" · ");
-
-  // re-trigger entrance animation + scroll long titles
-  retrigger(els.title); retrigger(els.subtitle);
-  applyTitleScroll();
 }
 
 function retrigger(node) {
@@ -279,7 +293,7 @@ async function fetchItunes(artist, title, album) {
       const r = j && j.results && j.results[0];
       if (r && r.artworkUrl100) {
         return {
-          art: r.artworkUrl100.replace("100x100bb", "1000x1000bb"),
+          art: r.artworkUrl100.replace("100x100bb", ART_SIZE),
           year: r.releaseDate ? r.releaseDate.slice(0, 4) : "",
           durationMs: r.trackTimeMillis || 0,
         };

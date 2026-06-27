@@ -38,6 +38,10 @@ body:hover { cursor: default; }
   transition: background-image .8s ease;
   z-index: 0;
 }
+/* lighter blur on touch devices (iPad Mini etc.) — 80px is very GPU-heavy */
+@media (hover: none) {
+  #backdrop { filter: blur(34px) saturate(1.3) brightness(0.7); transform: scale(1.15); }
+}
 #vignette {
   position: fixed; top: 0; right: 0; bottom: 0; left: 0; z-index: 1;
   background: radial-gradient(ellipse at center, transparent 30%, rgba(0,0,0,.55) 100%);
