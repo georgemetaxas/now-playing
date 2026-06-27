@@ -54,9 +54,14 @@ body:hover { cursor: default; }
 }
 #meta {
   position: absolute; left: 4.5vw; bottom: 6vh; right: 4.5vw;
-  text-shadow: 0 2px 24px rgba(0,0,0,.6);
+  text-shadow: 0 1px 3px rgba(0,0,0,.45), 0 2px 28px rgba(0,0,0,.55);
 }
-#title-wrap { overflow: hidden; max-width: 91vw; }
+/* vertical padding gives the text-shadow blur room (it's otherwise clipped by
+   overflow:hidden); the negative margin keeps the layout position unchanged */
+#title-wrap {
+  overflow: hidden; max-width: 91vw;
+  padding: 30px 0; margin: -30px 0;
+}
 #title {
   display: inline-block;
   white-space: nowrap;
@@ -83,7 +88,7 @@ body:hover { cursor: default; }
   left: 0; right: 0; bottom: 6vh;
   text-align: center;
 }
-#player.albumart #title-wrap { max-width: 92vw; margin: 0 auto; }
+#player.albumart #title-wrap { max-width: 92vw; margin: -30px auto; }
 #subtitle {
   margin-top: .4em;
   font-size: clamp(15px, 2vw, 26px);
