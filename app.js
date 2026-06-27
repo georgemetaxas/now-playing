@@ -75,7 +75,7 @@ async function poll() {
   if (!cfg.user || !cfg.key) { toScreensaver(); return; }
   try {
     const data = await lastfm("user.getRecentTracks", { user: cfg.user, limit: 8 });
-    const tracks = data?.recenttracks?.track || [];
+    const tracks = (data && data.recenttracks && data.recenttracks.track) || [];
     const list = Array.isArray(tracks) ? tracks : [tracks];
     lastPollOk = Date.now();
 
@@ -275,8 +275,8 @@ async function fetchItunes(artist, title, album) {
       }).toString();
       const res = await fetch(url);
       const j = await res.json();
-      const r = j?.results?.[0];
-      if (r?.artworkUrl100) {
+      const r = j && j.results && j.results[0];
+      if (r && r.artworkUrl100) {
         return {
           art: r.artworkUrl100.replace("100x100bb", "1000x1000bb"),
           year: r.releaseDate ? r.releaseDate.slice(0, 4) : "",
@@ -297,7 +297,7 @@ async function fetchYear(artist, title, album) {
   let year = "";
   try {
     const info = await lastfm("track.getInfo", { artist, track: title });
-    const wiki = info?.track?.wiki?.published; // e.g. "06 Sep 2011, 14:00"
+    const wiki = info && info.track && info.track.wiki && info.track.wiki.published; // e.g. "06 Sep 2011, 14:00"
     const m = wiki && wiki.match(/\b(19|20)\d{2}\b/);
     if (m) year = m[0];
   } catch {}
@@ -307,7 +307,7 @@ async function fetchYear(artist, title, album) {
       const res = await fetch(
         `https://musicbrainz.org/ws/2/recording?query=${q}&fmt=json&limit=1`);
       const j = await res.json();
-      const date = j?.recordings?.[0]?.["first-release-date"];
+      const date = j && j.recordings && j.recordings[0] && j.recordings[0]["first-release-date"];
       if (date) year = date.slice(0, 4);
     } catch {}
   }
