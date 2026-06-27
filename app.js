@@ -58,6 +58,7 @@ async function lastfm(method, params = {}) {
   const url = new URL("https://ws.audioscrobbler.com/2.0/");
   url.search = new URLSearchParams({
     method, api_key: cfg.key, format: "json", ...params,
+    _: Date.now(),   // cache-bust: iOS Safari ignores cache:no-store on GETs
   }).toString();
   // abort hung requests so polls can't pile up on a long-running kiosk tab
   const ctrl = new AbortController();
