@@ -28,7 +28,7 @@ const $ = (id) => document.getElementById(id);
 const els = {
   backdrop: $("backdrop"), player: $("player"), art: $("art"), video: $("video"),
   title: $("title"), titleWrap: $("title-wrap"), subtitle: $("subtitle"),
-  progress: $("progress"), progressFill: $("progress-fill"), screensaver: $("screensaver"),
+  layoutToggle: $("layout-toggle"), screensaver: $("screensaver"),
   mosaic: $("mosaic"), clock: $("clock"), date: $("date"),
   modeToggle: $("mode-toggle"), settings: $("settings"),
   cfgUser: $("cfg-user"), cfgKey: $("cfg-key"),
@@ -41,8 +41,7 @@ let mode = cfg.mode || "art";          // "art" | "video"
 let currentKey = null;                  // identity of the track currently shown
 let artCache = [];                      // recent cover art URLs for the mosaic
 const yearCache = {};
-let trackStart = 0;                     // when current track first appeared (perf time)
-let trackDurMs = 0;                     // iTunes-reported duration, 0 = unknown
+let layout = cfg.layout || "fullbleed"; // "fullbleed" | "albumart"
 let view = "screensaver";               // "player" | "screensaver"
 let idleTimer = null;                   // grace timer before falling back to screensaver
 
@@ -128,10 +127,6 @@ async function showTrack(t) {
   if (!year) year = await fetchYear(artist, title, album);
   els.subtitle.textContent = [artist, year].filter(Boolean).join(" · ");
 
-  // estimated progress for this track
-  trackDurMs = itunes.durationMs || 0;
-  trackStart = performance.now();
-
   // re-trigger entrance animation + scroll long titles
   retrigger(els.title); retrigger(els.subtitle);
   applyTitleScroll();
@@ -159,18 +154,18 @@ function applyTitleScroll() {
   });
 }
 
-// Estimated playback progress bar (Last.fm gives no real position)
-function tickProgress() {
-  const playing = view === "player" && mode === "art";
-  if (playing && trackDurMs > 0) {
-    const frac = Math.min(1, (performance.now() - trackStart) / trackDurMs);
-    els.progressFill.style.width = (frac * 100) + "%";
-    els.progress.style.opacity = "1";
-  } else {
-    els.progress.style.opacity = "0";
-  }
-  requestAnimationFrame(tickProgress);
+// Full-bleed vs album-art layout
+function applyLayout() {
+  const album = layout === "albumart";
+  els.player.classList.toggle("albumart", album);
+  els.layoutToggle.textContent = album ? "⛶ Art" : "⊡ Bleed";
+  applyTitleScroll();
 }
+els.layoutToggle.addEventListener("click", () => {
+  layout = layout === "fullbleed" ? "albumart" : "fullbleed";
+  cfg.layout = layout; saveConfig();
+  applyLayout();
+});
 
 /* ============================================================
    Art / Video mode
@@ -423,10 +418,10 @@ $("fs-btn").addEventListener("click", () => {
    Boot
    ============================================================ */
 applyMode();
+applyLayout();
 toScreensaver();
 tickClock();
 setInterval(tickClock, 1000);
-requestAnimationFrame(tickProgress);
 poll();
 setInterval(poll, POLL_MS);
 

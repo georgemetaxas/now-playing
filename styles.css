@@ -78,18 +78,17 @@ body:hover { cursor: default; }
   to   { transform: translateX(calc(var(--scroll-dist, 0px) * -1)); }
 }
 
-#progress {
-  margin-top: 1.2em;
-  height: 4px; width: min(440px, 62vw);
-  background: rgba(255,255,255,.2);
-  border-radius: 2px; overflow: hidden;
-  opacity: 0; transition: opacity .4s ease;
+/* ---- Album-art layout (whole cover floating over ambient glow) ---- */
+#player.albumart #art {
+  object-fit: contain;
+  padding: 7vh 4vw 19vh;       /* inset the cover, leaving room for text */
 }
-#progress-fill {
-  height: 100%; width: 0%;
-  background: var(--accent, #fff); border-radius: 2px;
-  transition: background .6s ease;
+#player.albumart #shade { display: none; }
+#player.albumart #meta {
+  left: 0; right: 0; bottom: 6vh;
+  text-align: center;
 }
+#player.albumart #title-wrap { max-width: 92vw; margin: 0 auto; }
 #subtitle {
   margin-top: .4em;
   font-size: clamp(15px, 2vw, 26px);
