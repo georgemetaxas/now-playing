@@ -376,17 +376,12 @@ function buildMosaic() {
   const cols = Math.max(4, Math.round(window.innerWidth / 175));
   const tileSize = window.innerWidth / cols;
   const rows = Math.ceil(window.innerHeight / tileSize);
-  els.mosaic.style.setProperty("--cols", cols);
+  els.mosaic.style.gridTemplateColumns = "repeat(" + cols + ", 1fr)";
   const count = cols * rows;
   for (let i = 0; i < count; i++) {
     const tile = document.createElement("div");
     tile.className = "tile";
-    const inner = document.createElement("div"); inner.className = "tile-inner";
-    const front = document.createElement("div"); front.className = "face front";
-    const back = document.createElement("div"); back.className = "face back";
-    front.style.backgroundImage = `url("${pickArt()}")`;
-    inner.appendChild(front); inner.appendChild(back);
-    tile.appendChild(inner);
+    tile.style.backgroundImage = `url("${pickArt()}")`;
     els.mosaic.appendChild(tile);
   }
 }
@@ -409,17 +404,13 @@ function flipRandomTile() {
   const tiles = els.mosaic.children;
   if (!tiles.length || !artPool().length) return;
   const tile = tiles[Math.floor(Math.random() * tiles.length)];
-  if (tile.classList.contains("flip")) return;     // already mid-flip
+  if (tile.classList.contains("flipping")) return;   // already mid-swap
   const art = pickArt();
-  const front = tile.querySelector(".front");
-  const back = tile.querySelector(".back");
-  if (!front || !back) return;
-  back.style.backgroundImage = `url("${art}")`;
-  tile.classList.add("flip");
+  tile.classList.add("flipping");                    // squish to an edge
   setTimeout(() => {
-    front.style.backgroundImage = `url("${art}")`;   // settle on the new face
-    tile.classList.remove("flip");
-  }, 740);
+    tile.style.backgroundImage = `url("${art}")`;    // swap cover while thin
+    tile.classList.remove("flipping");               // expand back
+  }, 370);
 }
 
 // Your library: top albums (reliable art) folded in with recent tracks

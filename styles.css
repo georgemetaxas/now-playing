@@ -119,28 +119,22 @@ body:hover { cursor: default; }
 #mosaic {
   position: absolute; top: 0; right: 0; bottom: 0; left: 0;
   display: grid;
-  grid-template-columns: repeat(var(--cols, 8), 1fr);
+  grid-template-columns: repeat(8, 1fr);   /* JS sets the real column count */
   grid-auto-rows: 1fr;
-  gap: 2px;                       /* the gap glows = Tron grid lines */
+  grid-gap: 2px; gap: 2px;                  /* the gap glows = Tron grid lines */
   background: rgba(0, 224, 255, 0.22);
+  -webkit-filter: saturate(1.05) brightness(0.82);
   filter: saturate(1.05) brightness(0.82);
 }
+/* 2D "flip": squish to an edge, swap the cover, expand — works on every
+   browser including iOS 12 (no 3D transforms / backface-visibility). */
 .tile {
-  position: relative; background: #04060a;
-  -webkit-perspective: 700px; perspective: 700px;
-}
-.tile-inner {
-  position: absolute; top: 0; right: 0; bottom: 0; left: 0;
-  -webkit-transform-style: preserve-3d; transform-style: preserve-3d;
-  -webkit-transition: -webkit-transform .7s ease; transition: transform .7s ease;
-}
-.tile.flip .tile-inner { -webkit-transform: rotateY(180deg); transform: rotateY(180deg); }
-.tile .face {
-  position: absolute; top: 0; right: 0; bottom: 0; left: 0;
-  -webkit-backface-visibility: hidden; backface-visibility: hidden;
+  background-color: #04060a;
   background-size: cover; background-position: center;
+  -webkit-transform: scaleX(1); transform: scaleX(1);
+  -webkit-transition: -webkit-transform .36s ease; transition: transform .36s ease;
 }
-.tile .back { -webkit-transform: rotateY(180deg); transform: rotateY(180deg); }
+.tile.flipping { -webkit-transform: scaleX(0.04); transform: scaleX(0.04); }
 
 #ss-dim {
   position: absolute; top: 0; right: 0; bottom: 0; left: 0;
@@ -186,9 +180,10 @@ body:hover { cursor: default; }
 /* ---- Controls ---- */
 #controls {
   position: fixed; bottom: 18px; right: 18px; z-index: 10;
-  display: flex; gap: 10px;
+  display: flex;
   opacity: 0; transition: opacity .3s ease;
 }
+#controls > * + * { margin-left: 10px; }   /* spacing (flex gap unsupported on iOS 12) */
 body:hover #controls { opacity: 1; }
 /* touch devices have no hover — keep controls visible so they're tappable */
 @media (hover: none) { #controls { opacity: 1; } }
