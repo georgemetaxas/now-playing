@@ -39,6 +39,7 @@ const els = {
    ============================================================ */
 let currentKey = null;                  // identity of the track currently shown
 let artCache = [];                      // recent cover art URLs for the mosaic
+let libraryArt = [];                    // top-album covers for the screensaver wall
 const yearCache = {};
 let layout = cfg.layout || "fullbleed"; // "fullbleed" | "albumart"
 let view = "screensaver";               // "player" | "screensaver"
@@ -336,6 +337,7 @@ async function fetchYear(artist, title, album) {
 /* ---- View transitions (crossfade) + idle grace timer ---- */
 function toPlayer() {
   view = "player";
+  stopFlips();
   els.screensaver.classList.remove("visible");
   els.player.classList.add("visible");
 }
@@ -345,6 +347,7 @@ function toScreensaver() {
   currentKey = null;
   setAccent(null);
   buildMosaic();
+  startFlips();
   els.player.classList.remove("visible");
   els.screensaver.classList.add("visible");
 }
@@ -357,18 +360,82 @@ function clearIdle() {
   if (idleTimer) { clearTimeout(idleTimer); idleTimer = null; }
 }
 
+// Pool of cover art for the wall: your top albums, plus recent tracks.
+function artPool() {
+  return libraryArt.length ? libraryArt : artCache;
+}
+function pickArt() {
+  const pool = artPool();
+  return pool.length ? pool[Math.floor(Math.random() * pool.length)] : "";
+}
+
 function buildMosaic() {
-  const arts = artCache.length ? artCache : [];
-  if (!arts.length) { els.mosaic.innerHTML = ""; return; }
-  // fill a grid of ~24 tiles, cycling through available art
-  const tiles = 24;
+  const pool = artPool();
   els.mosaic.innerHTML = "";
-  for (let i = 0; i < tiles; i++) {
-    const d = document.createElement("div");
-    d.style.backgroundImage = `url("${arts[i % arts.length]}")`;
-    d.style.animationDelay = (i * 0.04) + "s";
-    els.mosaic.appendChild(d);
+  if (!pool.length) return;
+  const cols = Math.max(4, Math.round(window.innerWidth / 175));
+  const tileSize = window.innerWidth / cols;
+  const rows = Math.ceil(window.innerHeight / tileSize);
+  els.mosaic.style.setProperty("--cols", cols);
+  const count = cols * rows;
+  for (let i = 0; i < count; i++) {
+    const tile = document.createElement("div");
+    tile.className = "tile";
+    const inner = document.createElement("div"); inner.className = "tile-inner";
+    const front = document.createElement("div"); front.className = "face front";
+    const back = document.createElement("div"); back.className = "face back";
+    front.style.backgroundImage = `url("${pickArt()}")`;
+    inner.appendChild(front); inner.appendChild(back);
+    tile.appendChild(inner);
+    els.mosaic.appendChild(tile);
   }
+}
+
+// Flip a random tile to a new cover at random intervals (only while idle)
+let flipTimer = null;
+function startFlips() {
+  stopFlips();
+  const tick = () => {
+    flipRandomTile();
+    flipTimer = setTimeout(tick, 600 + Math.random() * 2200);
+  };
+  flipTimer = setTimeout(tick, 900);
+}
+function stopFlips() {
+  if (flipTimer) { clearTimeout(flipTimer); flipTimer = null; }
+}
+function flipRandomTile() {
+  if (view !== "screensaver") return;
+  const tiles = els.mosaic.children;
+  if (!tiles.length || !artPool().length) return;
+  const tile = tiles[Math.floor(Math.random() * tiles.length)];
+  if (tile.classList.contains("flip")) return;     // already mid-flip
+  const art = pickArt();
+  const front = tile.querySelector(".front");
+  const back = tile.querySelector(".back");
+  if (!front || !back) return;
+  back.style.backgroundImage = `url("${art}")`;
+  tile.classList.add("flip");
+  setTimeout(() => {
+    front.style.backgroundImage = `url("${art}")`;   // settle on the new face
+    tile.classList.remove("flip");
+  }, 740);
+}
+
+// Your library: top albums (reliable art) folded in with recent tracks
+async function fetchLibrary() {
+  try {
+    const data = await lastfm("user.getTopAlbums", {
+      user: cfg.user, period: "3month", limit: 60,
+    });
+    const albums = (data && data.topalbums && data.topalbums.album) || [];
+    const arts = albums.map(a => pickImage(a.image))
+      .filter(u => u && !isPlaceholderArt(u));
+    if (arts.length) {
+      libraryArt = arts;
+      if (view === "screensaver") { buildMosaic(); startFlips(); }
+    }
+  } catch (e) { /* keep whatever pool we have */ }
 }
 
 function tickClock() {
@@ -426,6 +493,18 @@ tickClock();
 setInterval(tickClock, 1000);
 poll();
 setInterval(poll, POLL_MS);
+
+// Library art for the screensaver wall (refresh every 30 min)
+fetchLibrary();
+setInterval(fetchLibrary, 30 * 60 * 1000);
+
+// Rebuild the wall on resize/orientation change while idle
+let resizeTimer = null;
+window.addEventListener("resize", () => {
+  if (view !== "screensaver") return;
+  clearTimeout(resizeTimer);
+  resizeTimer = setTimeout(() => { buildMosaic(); startFlips(); }, 300);
+});
 
 // Kiosk resilience: poll immediately when the tab wakes, and if polling has
 // stalled for too long (network drop, browser throttling), reload the page.

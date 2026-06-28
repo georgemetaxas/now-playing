@@ -114,33 +114,64 @@ body:hover { cursor: default; }
   animation: rise .6s .08s ease both;
 }
 
-/* ---- Screensaver ---- */
-#screensaver { position: fixed; top: 0; right: 0; bottom: 0; left: 0; z-index: 2; }
+/* ---- Screensaver (Tron neon cover-art wall) ---- */
+#screensaver { position: fixed; top: 0; right: 0; bottom: 0; left: 0; z-index: 2; background: #04060a; }
 #mosaic {
   position: absolute; top: 0; right: 0; bottom: 0; left: 0;
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+  grid-template-columns: repeat(var(--cols, 8), 1fr);
   grid-auto-rows: 1fr;
-  filter: saturate(1.1);
+  gap: 2px;                       /* the gap glows = Tron grid lines */
+  background: rgba(0, 224, 255, 0.22);
+  filter: saturate(1.05) brightness(0.82);
 }
-#mosaic div {
+.tile {
+  position: relative; background: #04060a;
+  -webkit-perspective: 700px; perspective: 700px;
+}
+.tile-inner {
+  position: absolute; top: 0; right: 0; bottom: 0; left: 0;
+  -webkit-transform-style: preserve-3d; transform-style: preserve-3d;
+  -webkit-transition: -webkit-transform .7s ease; transition: transform .7s ease;
+}
+.tile.flip .tile-inner { -webkit-transform: rotateY(180deg); transform: rotateY(180deg); }
+.tile .face {
+  position: absolute; top: 0; right: 0; bottom: 0; left: 0;
+  -webkit-backface-visibility: hidden; backface-visibility: hidden;
   background-size: cover; background-position: center;
-  animation: fadein 1.2s ease both;
 }
-#ss-dim { position: absolute; top: 0; right: 0; bottom: 0; left: 0; background: rgba(5,5,7,.74); }
+.tile .back { -webkit-transform: rotateY(180deg); transform: rotateY(180deg); }
+
+#ss-dim {
+  position: absolute; top: 0; right: 0; bottom: 0; left: 0;
+  background: radial-gradient(ellipse at center, rgba(4,6,10,.55) 0%, rgba(4,6,10,.9) 100%);
+}
 #ss-center {
   position: absolute; top: 0; right: 0; bottom: 0; left: 0;
   display: flex; flex-direction: column; align-items: center; justify-content: center;
   text-align: center;
 }
 #clock {
+  font-family: "Orbitron", -apple-system, sans-serif;
   font-size: 140px; /* iOS<13.4 fallback */
   font-size: clamp(64px, 15vw, 180px);
-  font-weight: 800; letter-spacing: -0.03em;
+  font-weight: 800; letter-spacing: 0.02em;
   font-variant-numeric: tabular-nums;
+  color: #dffaff;
+  text-shadow: 0 0 8px #00e5ff, 0 0 24px #00b4ff, 0 0 54px #0090ff;
 }
-#date { margin-top: .1em; font-size: 28px; font-size: clamp(16px, 2.4vw, 30px); font-weight: 500; opacity: .7; }
-#idle { margin-top: 1.2em; font-size: 16px; font-size: clamp(13px, 1.6vw, 18px); font-weight: 500; opacity: .4; }
+#date {
+  margin-top: .25em; font-family: "Orbitron", sans-serif;
+  font-size: 26px; font-size: clamp(15px, 2.2vw, 28px);
+  font-weight: 500; letter-spacing: .34em; text-transform: uppercase;
+  color: #8fe9ff; text-shadow: 0 0 10px rgba(0,180,255,.7);
+}
+#idle {
+  margin-top: 1.4em; font-family: "Orbitron", sans-serif;
+  font-size: 15px; font-size: clamp(12px, 1.5vw, 16px);
+  font-weight: 500; letter-spacing: .42em; text-transform: uppercase;
+  color: #ff9b3d; text-shadow: 0 0 10px rgba(255,106,0,.7);
+}
 
 /* ---- Controls ---- */
 #controls {
