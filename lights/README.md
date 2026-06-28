@@ -34,7 +34,7 @@ Fill in `config.json`:
 | `model` | `l900`, `l920`, or `l930`. |
 | `lastfm_user` / `lastfm_key` | Already filled with the Now Playing defaults. |
 | `brightness` | Playing brightness, 1–100. |
-| `idle_mode` | `dim` (warm low light), `off` (turn strip off), or `keep` (hold last colour). |
+| `idle_mode` | `restore` (back to the colour set in Google Home — default), `dim` (warm low light), `off` (turn strip off), or `keep` (hold last colour). |
 
 > 🔒 `config.json` holds your TP-Link password and is **git-ignored** — it is never
 > committed. You can also pass the secrets via `TAPO_EMAIL` / `TAPO_PASSWORD`

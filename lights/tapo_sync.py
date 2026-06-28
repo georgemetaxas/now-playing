@@ -51,7 +51,7 @@ def load_config():
     cfg.setdefault("model", "l930")
     cfg.setdefault("poll_seconds", 8)
     cfg.setdefault("brightness", 80)
-    cfg.setdefault("idle_mode", "dim")      # "dim" | "off" | "keep"
+    cfg.setdefault("idle_mode", "restore")  # "restore" | "dim" | "off" | "keep"
     cfg.setdefault("idle_brightness", 15)
     return cfg
 
@@ -143,10 +143,46 @@ async def set_warm_white(device, brightness):
     await device.set().on().brightness(brightness).hue_saturation(30, 25).send(device)
 
 
-async def go_idle(device, cfg):
-    if cfg["idle_mode"] == "off":
+async def capture_state(device):
+    """Snapshot the strip's current colour — i.e. whatever Google Home set."""
+    try:
+        info = await device.get_device_info()
+        return {
+            "on": getattr(info, "device_on", True),
+            "brightness": getattr(info, "brightness", None),
+            "hue": getattr(info, "hue", None),
+            "saturation": getattr(info, "saturation", None),
+            "color_temp": getattr(info, "color_temp", None),
+        }
+    except Exception as e:
+        print(f"! could not read strip state: {e}", file=sys.stderr)
+        return None
+
+
+async def restore_state(device, state):
+    """Put the strip back to a captured snapshot (the Google Home colour)."""
+    if not state:
+        return
+    if not state.get("on"):
         await device.off()
-    elif cfg["idle_mode"] == "dim":
+        return
+    builder = device.set().on().brightness(state.get("brightness") or 100)
+    ct = state.get("color_temp")
+    hue, sat = state.get("hue"), state.get("saturation")
+    if ct and ct > 0:
+        builder = builder.color_temperature(ct)   # white setting
+    elif hue is not None and sat is not None:
+        builder = builder.hue_saturation(hue, sat)  # colour setting
+    await builder.send(device)
+
+
+async def go_idle(device, cfg, home_state):
+    mode = cfg["idle_mode"]
+    if mode == "restore":
+        await restore_state(device, home_state)   # back to Google Home colour
+    elif mode == "off":
+        await device.off()
+    elif mode == "dim":
         await device.set().on().brightness(cfg["idle_brightness"]).hue_saturation(30, 20).send(device)
     # "keep" → leave the last colour as-is
 
@@ -161,13 +197,25 @@ async def main():
     print(f"Connected to {cfg['model'].upper()} at {cfg['strip_ip']}. Watching {cfg['lastfm_user']}…")
 
     last_key = None        # last track we set a colour for
-    idle_set = False       # have we already applied the idle state
+    playing = None         # None = unknown (startup/reconnect), True/False otherwise
+    idle_applied = False   # have we applied the idle state since playback stopped
+    home_state = await capture_state(device)   # initial Google Home colour
 
     while True:
         try:
             np = get_now_playing(cfg)
             if np:
-                idle_set = False
+                # On a real idle→playing transition, re-snapshot the current
+                # colour so idle later restores the latest Google Home setting.
+                if playing is False:
+                    snap = await capture_state(device)
+                    if snap:
+                        home_state = snap
+                if playing is not True:
+                    playing = True
+                    idle_applied = False
+                    last_key = None
+
                 artist, title, album, lf_img = np
                 key = f"{artist} — {title}"
                 if key != last_key:
@@ -182,11 +230,14 @@ async def main():
                         await set_warm_white(device, cfg["brightness"])
                         print(f"♪ {key}  →  warm white (no vivid colour)")
             else:
-                if not idle_set:
-                    await go_idle(device, cfg)
-                    idle_set = True
+                if not idle_applied:
+                    await go_idle(device, cfg, home_state)
+                    idle_applied = True
+                    playing = False
                     last_key = None
-                    print("· nothing playing → idle")
+                    print("· nothing playing → "
+                          + ("restored Google Home colour" if cfg["idle_mode"] == "restore"
+                             else "idle"))
         except Exception as e:
             # Tapo sessions expire (SessionTimeout/403) — a fresh handle isn't
             # enough, so log in again from scratch and re-apply on next loop.
@@ -195,7 +246,8 @@ async def main():
                 client = ApiClient(cfg["tapo_email"], cfg["tapo_password"])
                 device = await get_device(client, cfg)
                 last_key = None       # force the colour to be re-applied
-                idle_set = False
+                playing = None        # don't re-snapshot from our own colour
+                idle_applied = False
                 print("· reconnected to strip")
             except Exception as e2:
                 print(f"! reconnect failed: {e2}", file=sys.stderr)
