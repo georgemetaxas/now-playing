@@ -373,11 +373,15 @@ function buildMosaic() {
   const pool = artPool();
   els.mosaic.innerHTML = "";
   if (!pool.length) return;
-  const cols = Math.max(4, Math.round(window.innerWidth / 175));
-  const tileSize = window.innerWidth / cols;
-  const rows = Math.ceil(window.innerHeight / tileSize);
+  const vw = window.innerWidth || 1280;
+  const vh = window.innerHeight || 720;
+  const cols = Math.max(4, Math.round(vw / 175));
+  const tileSize = Math.ceil(vw / cols);
+  const rows = Math.ceil(vh / tileSize) + 1;
+  // Explicit column count + row height — don't rely on grid 1fr sizing (iOS 12)
   els.mosaic.style.gridTemplateColumns = "repeat(" + cols + ", 1fr)";
-  const count = cols * rows;
+  els.mosaic.style.gridAutoRows = tileSize + "px";
+  const count = Math.min(cols * rows, 200);
   for (let i = 0; i < count; i++) {
     const tile = document.createElement("div");
     tile.className = "tile";
