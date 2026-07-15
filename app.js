@@ -367,7 +367,7 @@ function clearIdle() {
    ============================================================ */
 function buildEq() {
   const vw = window.innerWidth || 1280;
-  const count = Math.max(16, Math.min(56, Math.round(vw / 26)));
+  const count = Math.max(24, Math.min(96, Math.round(vw / 14)));
   els.eq.innerHTML = "";
   for (let i = 0; i < count; i++) {
     const b = document.createElement("div");

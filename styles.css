@@ -74,17 +74,34 @@ body:hover { cursor: default; }
   pointer-events: none;
   opacity: .9;
 }
-#player.albumart #eq { z-index: 0; opacity: .95; }  /* contained: behind the cover */
 #eq .bar {
   flex: 1 1 auto;
-  margin: 0 1px;
-  border-radius: 3px 3px 0 0;
+  margin: 0 3px;                       /* thin bars */
+  border-radius: 2px 2px 0 0;
   background: linear-gradient(to top,
     var(--accent, #fff) 0%, var(--accent, #fff) 62%, rgba(255,255,255,.92) 100%);
   -webkit-transform-origin: bottom; transform-origin: bottom;
   -webkit-transform: scaleY(.12); transform: scaleY(.12);
   -webkit-animation: eqbounce 1s ease-in-out infinite alternate;
   animation: eqbounce 1s ease-in-out infinite alternate;
+}
+
+/* Contained view: a vertically-centred sound wave behind the cover art.
+   Bars grow symmetrically from a centre line (margin-top trick centres the
+   row without an extra transform — iOS 12-safe). */
+#player.albumart #eq {
+  z-index: 0;
+  bottom: auto; top: 50%;
+  height: 46vh; margin-top: -23vh;
+  align-items: center;
+  opacity: .95;
+}
+#player.albumart #eq .bar {
+  border-radius: 99px;
+  -webkit-transform-origin: center; transform-origin: center;
+  background: linear-gradient(to bottom,
+    rgba(255,255,255,.9) 0%, var(--accent, #fff) 32%,
+    var(--accent, #fff) 68%, rgba(255,255,255,.9) 100%);
 }
 /* don't burn cycles while the screensaver is up */
 #player:not(.visible) #eq .bar {
