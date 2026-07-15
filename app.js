@@ -26,7 +26,7 @@ function saveConfig() { localStorage.setItem(CFG_KEY, JSON.stringify(cfg)); }
    ============================================================ */
 const $ = (id) => document.getElementById(id);
 const els = {
-  backdrop: $("backdrop"), player: $("player"), art: $("art"),
+  backdrop: $("backdrop"), player: $("player"), art: $("art"), eq: $("eq"),
   title: $("title"), titleWrap: $("title-wrap"), subtitle: $("subtitle"),
   layoutToggle: $("layout-toggle"), screensaver: $("screensaver"),
   mosaic: $("mosaic"), clock: $("clock"), date: $("date"),
@@ -360,6 +360,29 @@ function clearIdle() {
   if (idleTimer) { clearTimeout(idleTimer); idleTimer = null; }
 }
 
+/* ============================================================
+   Equalizer bars — a simulated level meter (we have no audio
+   signal, the music plays elsewhere). Staggered CSS animations
+   keep it smooth on old hardware; colour comes from --accent.
+   ============================================================ */
+function buildEq() {
+  const vw = window.innerWidth || 1280;
+  const count = Math.max(16, Math.min(56, Math.round(vw / 26)));
+  els.eq.innerHTML = "";
+  for (let i = 0; i < count; i++) {
+    const b = document.createElement("div");
+    b.className = "bar";
+    b.style.height = (42 + Math.random() * 58).toFixed(1) + "%";   // varied peaks
+    const dur = (0.5 + Math.random() * 0.95).toFixed(2) + "s";
+    const delay = "-" + (Math.random() * 1.4).toFixed(2) + "s";     // desync instantly
+    b.style.animationDuration = dur;
+    b.style.animationDelay = delay;
+    b.style.webkitAnimationDuration = dur;
+    b.style.webkitAnimationDelay = delay;
+    els.eq.appendChild(b);
+  }
+}
+
 // Pool of cover art for the wall: your top albums, plus recent tracks.
 function artPool() {
   return libraryArt.length ? libraryArt : artCache;
@@ -483,6 +506,7 @@ if (!canFullscreen) {
    Boot
    ============================================================ */
 applyLayout();
+buildEq();
 toScreensaver();
 tickClock();
 setInterval(tickClock, 1000);
@@ -496,9 +520,11 @@ setInterval(fetchLibrary, 30 * 60 * 1000);
 // Rebuild the wall on resize/orientation change while idle
 let resizeTimer = null;
 window.addEventListener("resize", () => {
-  if (view !== "screensaver") return;
   clearTimeout(resizeTimer);
-  resizeTimer = setTimeout(() => { buildMosaic(); startFlips(); }, 300);
+  resizeTimer = setTimeout(() => {
+    buildEq();
+    if (view === "screensaver") { buildMosaic(); startFlips(); }
+  }, 300);
 });
 
 // Kiosk resilience: poll immediately when the tab wakes, and if polling has

@@ -61,16 +61,48 @@ body:hover { cursor: default; }
   position: absolute; top: 0; right: 0; bottom: 0; left: 0;
   width: 100%; height: 100%;
   object-fit: cover;
+  z-index: 1;
   animation: fadein .8s ease;
 }
+
+/* ---- Equalizer (simulated levels, colour from the album accent) ---- */
+#eq {
+  position: absolute; left: 0; right: 0; bottom: 0;
+  height: 22vh; min-height: 90px;
+  display: flex; align-items: flex-end;
+  z-index: 3;                 /* full-bleed: on top of the art and its shade */
+  pointer-events: none;
+  opacity: .9;
+}
+#player.albumart #eq { z-index: 0; opacity: .95; }  /* contained: behind the cover */
+#eq .bar {
+  flex: 1 1 auto;
+  margin: 0 1px;
+  border-radius: 3px 3px 0 0;
+  background: linear-gradient(to top,
+    var(--accent, #fff) 0%, var(--accent, #fff) 62%, rgba(255,255,255,.92) 100%);
+  -webkit-transform-origin: bottom; transform-origin: bottom;
+  -webkit-transform: scaleY(.12); transform: scaleY(.12);
+  -webkit-animation: eqbounce 1s ease-in-out infinite alternate;
+  animation: eqbounce 1s ease-in-out infinite alternate;
+}
+/* don't burn cycles while the screensaver is up */
+#player:not(.visible) #eq .bar {
+  -webkit-animation-play-state: paused; animation-play-state: paused;
+}
+@-webkit-keyframes eqbounce { from { -webkit-transform: scaleY(.12); } to { -webkit-transform: scaleY(1); } }
+@keyframes eqbounce { from { transform: scaleY(.12); } to { transform: scaleY(1); } }
+
 #shade {
   position: absolute; top: 0; right: 0; bottom: 0; left: 0;
   background: linear-gradient(to top, rgba(0,0,0,.78) 0%, rgba(0,0,0,.25) 28%, transparent 50%);
   pointer-events: none;
+  z-index: 2;
 }
 #meta {
   position: absolute; left: 4.5vw; bottom: 6vh; right: 4.5vw;
   text-shadow: 0 1px 3px rgba(0,0,0,.45), 0 2px 28px rgba(0,0,0,.55);
+  z-index: 4;
 }
 /* vertical padding gives the text-shadow blur room (it's otherwise clipped by
    overflow:hidden); the negative margin keeps the layout position unchanged */
