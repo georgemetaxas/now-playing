@@ -134,23 +134,24 @@ async function showTrack(t) {
     applyAccent(lfArt);
   }
 
-  // 2) Fetch hi-res art + release year in the background. Bail out if the
-  //    track has changed again while we were waiting (avoids stale updates).
-  const itunes = await fetchItunes(artist, title, album);
+  // 2) Resolve the best-matching cover + release year in the background. Bail
+  //    out if the track has changed again while we were waiting.
+  const resolved = await resolveArt(artist, title, album, lfArt);
   if (currentKey !== key) return;
 
-  const art = itunes.art || (isPlaceholderArt(lfArt) ? "" : lfArt) || "";
+  const art = resolved.art || "";
   if (art) {
     els.art.src = art;
     els.backdrop.style.backgroundImage = `url("${art}")`;
     applyAccent(art);
-  } else if (isPlaceholderArt(lfArt)) {
+  } else {
     els.art.removeAttribute("src");
     els.backdrop.style.backgroundImage = "";
     setAccent(null);
   }
 
-  let year = itunes.year;
+  let year = resolved.meta && resolved.meta.releaseDate
+    ? resolved.meta.releaseDate.slice(0, 4) : "";
   if (!year) year = await fetchYear(artist, title, album);
   if (currentKey !== key) return;
   els.subtitle.textContent = [artist, year].filter(Boolean).join(" · ");
@@ -275,33 +276,61 @@ function rgbToHex([r, g, b]) {
   return "#" + [r, g, b].map(x => x.toString(16).padStart(2, "0")).join("");
 }
 
-async function fetchItunes(artist, title, album) {
-  const cleanAlbum = (album || "").replace(/\s*\(feat\.[^)]*\)/i, "").trim();
-  const terms = [
-    `${artist} ${title}`,
-    cleanAlbum && `${artist} ${cleanAlbum}`,
-    title,
-  ].filter(Boolean);
+// Normalise a title/artist for fuzzy comparison: drop "(feat…)", "[remaster]",
+// edit/mix suffixes and punctuation so real matches line up.
+function normStr(s) {
+  return (s || "").toLowerCase()
+    .replace(/[\(\[][^\)\]]*[\)\]]/g, " ")
+    .replace(/\b(feat|ft|featuring|remaster(ed)?|radio edit|extended mix|original mix|deluxe|single)\b.*$/i, " ")
+    .replace(/[^a-z0-9]+/g, " ").trim();
+}
+function artistMatches(want, got) {
+  const a = normStr(want), b = normStr(got);
+  if (!a || !b) return false;
+  if (a === b || b.indexOf(a) >= 0 || a.indexOf(b) >= 0) return true;
+  const t = a.split(" ")[0];                       // primary artist token
+  return t.length >= 3 && b.split(" ").indexOf(t) >= 0;
+}
+function nameMatches(want, got) {
+  const a = normStr(want), b = normStr(got);
+  if (!a || !b) return false;
+  return a === b || a.indexOf(b) >= 0 || b.indexOf(a) >= 0;
+}
+function bigArt(url) { return url ? url.replace("100x100bb", ART_SIZE) : ""; }
 
-  for (const term of terms) {
-    try {
-      const url = new URL("https://itunes.apple.com/search");
-      url.search = new URLSearchParams({
-        term, entity: "song", limit: "1",
-      }).toString();
-      const res = await fetch(url);
-      const j = await res.json();
-      const r = j && j.results && j.results[0];
-      if (r && r.artworkUrl100) {
-        return {
-          art: r.artworkUrl100.replace("100x100bb", ART_SIZE),
-          year: r.releaseDate ? r.releaseDate.slice(0, 4) : "",
-          durationMs: r.trackTimeMillis || 0,
-        };
-      }
-    } catch (e) {}
+// Search iTunes and return the first result whose artist (and name) actually
+// match — avoids the wrong-cover mismatches from blind top-result matching.
+async function itunesSearch(term, entity, wantArtist, wantName, isAlbum) {
+  try {
+    const url = new URL("https://itunes.apple.com/search");
+    url.search = new URLSearchParams({ term, entity, limit: "8" }).toString();
+    const res = await fetch(url);
+    const j = await res.json();
+    const results = (j && j.results) || [];
+    for (const r of results) {
+      if (!r.artworkUrl100) continue;
+      if (!artistMatches(wantArtist, r.artistName)) continue;
+      const name = isAlbum ? r.collectionName : r.trackName;
+      if (wantName && !nameMatches(wantName, name)) continue;
+      return r;
+    }
+  } catch (e) {}
+  return null;
+}
+
+// Resolve the best cover for a track. Prefer the exact album cover (matches
+// what YouTube shows), then a validated song match, then Last.fm's own art
+// (comes from YouTube's metadata, so it's faithful — just lower resolution).
+async function resolveArt(artist, title, album, lfArt) {
+  const cleanAlbum = (album || "").replace(/\s*[\(\[](feat|ft)\.?[^\)\]]*[\)\]]/i, "").trim();
+  if (cleanAlbum) {
+    const alb = await itunesSearch(`${artist} ${cleanAlbum}`, "album", artist, cleanAlbum, true);
+    if (alb) return { art: bigArt(alb.artworkUrl100), meta: alb };
   }
-  return { art: null, year: "", durationMs: 0 };
+  const song = await itunesSearch(`${artist} ${title}`, "song", artist, title, false);
+  if (song) return { art: bigArt(song.artworkUrl100), meta: song };
+  if (lfArt && !isPlaceholderArt(lfArt)) return { art: lfArt, meta: null };
+  return { art: null, meta: null };
 }
 
 /* ============================================================
