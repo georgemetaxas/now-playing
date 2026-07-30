@@ -77,9 +77,14 @@ body:hover { cursor: default; }
 #eq .bar {
   flex: 1 1 auto;
   margin: 0 3px;                       /* thin bars */
-  border-radius: 2px 2px 0 0;
-  background: linear-gradient(to top,
-    var(--accent, #fff) 0%, var(--accent, #fff) 62%, rgba(255,255,255,.92) 100%);
+  /* retro segmented LED bar: a colour gradient carved into blocks by a
+     repeating stripe of gaps on top of it */
+  background:
+    repeating-linear-gradient(to top,
+      rgba(0,0,0,0) 0, rgba(0,0,0,0) 6px,
+      rgba(0,0,0,.5) 6px, rgba(0,0,0,.5) 9px),
+    linear-gradient(to top,
+      var(--accent, #fff) 0%, var(--accent, #fff) 55%, #fff 100%);
   -webkit-transform-origin: bottom; transform-origin: bottom;
   -webkit-transform: scaleY(.12); transform: scaleY(.12);
   -webkit-animation: eqbounce 1s ease-in-out infinite alternate;
@@ -97,12 +102,17 @@ body:hover { cursor: default; }
   opacity: .95;
 }
 #player.albumart #eq .bar {
-  border-radius: 99px;
+  border-radius: 3px;
   -webkit-transform-origin: center; transform-origin: center;
-  background: linear-gradient(to bottom,
-    #fff 0%, var(--accent, #fff) 30%,
-    var(--accent, #fff) 70%, #fff 100%);
-  /* neon Tron bloom on the dark void — scales with the bar via transform */
+  /* segmented blocks carved into the dark void, brightest at the tips */
+  background:
+    repeating-linear-gradient(to top,
+      rgba(0,0,0,0) 0, rgba(0,0,0,0) 6px,
+      var(--accent-dark, #04060a) 6px, var(--accent-dark, #04060a) 9px),
+    linear-gradient(to bottom,
+      #fff 0%, var(--accent, #fff) 24%,
+      var(--accent, #fff) 76%, #fff 100%);
+  /* neon Tron bloom — scales with the bar via transform */
   box-shadow: 0 0 6px var(--accent, #fff), 0 0 16px var(--accent, #fff),
               0 0 34px var(--accent, #fff);
 }
