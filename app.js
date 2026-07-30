@@ -179,7 +179,9 @@ function applyTitleScroll() {
 // Full-bleed vs album-art layout
 const layoutButtons = els.layoutToggle.querySelectorAll("button");
 function applyLayout() {
-  els.player.classList.toggle("albumart", layout === "albumart");
+  const album = layout === "albumart";
+  els.player.classList.toggle("albumart", album);
+  document.body.classList.toggle("albumart", album);
   layoutButtons.forEach(b => b.classList.toggle("active", b.dataset.layout === layout));
   applyTitleScroll();
 }
