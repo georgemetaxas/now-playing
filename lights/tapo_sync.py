@@ -197,23 +197,18 @@ async def main():
     print(f"Connected to {cfg['model'].upper()} at {cfg['strip_ip']}. Watching {cfg['lastfm_user']}…")
 
     last_key = None        # last track we set a colour for
-    playing = None         # None = unknown (startup/reconnect), True/False otherwise
-    idle_applied = False   # have we applied the idle state since playback stopped
-    home_state = await capture_state(device)   # initial Google Home colour
+    active = False         # are we currently overriding the strip for playback?
+    home_state = None      # the strip's state captured just before playback began
 
     while True:
         try:
             np = get_now_playing(cfg)
             if np:
-                # On a real idle→playing transition, re-snapshot the current
-                # colour so idle later restores the latest Google Home setting.
-                if playing is False:
-                    snap = await capture_state(device)
-                    if snap:
-                        home_state = snap
-                if playing is not True:
-                    playing = True
-                    idle_applied = False
+                if not active:
+                    # idle → playing: snapshot the current state (colour, white,
+                    # or OFF) so we can put it back exactly when playback stops.
+                    home_state = await capture_state(device)
+                    active = True
                     last_key = None
 
                 artist, title, album, lf_img = np
@@ -229,25 +224,25 @@ async def main():
                     else:
                         await set_warm_white(device, cfg["brightness"])
                         print(f"♪ {key}  →  warm white (no vivid colour)")
-            else:
-                if not idle_applied:
-                    await go_idle(device, cfg, home_state)
-                    idle_applied = True
-                    playing = False
-                    last_key = None
-                    print("· nothing playing → "
-                          + ("restored Google Home colour" if cfg["idle_mode"] == "restore"
-                             else "idle"))
+            elif active:
+                # playing → idle: restore the pre-playback state ONCE (its
+                # colour, or OFF if it was off), then leave the strip alone.
+                await go_idle(device, cfg, home_state)
+                active = False
+                last_key = None
+                print("· stopped → restored the strip to its previous state")
+            # Steady idle (not active): never touch the strip. This is the key
+            # fix — a light turned off in Google Home stays off, and reconnects
+            # can't turn it back on.
         except Exception as e:
-            # Tapo sessions expire (SessionTimeout/403) — a fresh handle isn't
-            # enough, so log in again from scratch and re-apply on next loop.
+            # Tapo sessions expire (SessionTimeout/403) — log in again. A
+            # reconnect is NOT a playback transition, so leave `active` alone so
+            # it can never trigger a spurious restore/re-apply while idle.
             print(f"! {type(e).__name__}: {e}  → re-authenticating", file=sys.stderr)
             try:
                 client = ApiClient(cfg["tapo_email"], cfg["tapo_password"])
                 device = await get_device(client, cfg)
-                last_key = None       # force the colour to be re-applied
-                playing = None        # don't re-snapshot from our own colour
-                idle_applied = False
+                last_key = None       # re-apply colour next loop if still playing
                 print("· reconnected to strip")
             except Exception as e2:
                 print(f"! reconnect failed: {e2}", file=sys.stderr)
