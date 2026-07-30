@@ -211,18 +211,33 @@ function setAccent(hex) {
   const c = hex || "#fff";
   document.documentElement.style.setProperty("--accent", c);
   document.documentElement.style.setProperty("--accent-dark", darkTint(c));
+  document.documentElement.style.setProperty("--accent-2", hueShift(c, 55));
+}
+
+function hexToRgbArr(hex) {
+  let h = hex;
+  if (h.length === 4) h = "#" + h[1] + h[1] + h[2] + h[2] + h[3] + h[3];
+  return [parseInt(h.slice(1, 3), 16), parseInt(h.slice(3, 5), 16), parseInt(h.slice(5, 7), 16)];
 }
 
 // A very dark tint of the accent — used as the contained-view backdrop.
 function darkTint(hex) {
-  let h = hex;
-  if (h.length === 4) h = "#" + h[1] + h[1] + h[2] + h[2] + h[3] + h[3];
-  const r = parseInt(h.slice(1, 3), 16),
-        g = parseInt(h.slice(3, 5), 16),
-        b = parseInt(h.slice(5, 7), 16);
-  let hsl = rgbToHsl(r, g, b);
+  const [r, g, b] = hexToRgbArr(hex);
+  const hsl = rgbToHsl(r, g, b);
   const s = hsl[1] < 0.08 ? 0 : Math.min(0.6, Math.max(0.32, hsl[1]));
   return rgbToHex(hslToRgb(hsl[0], s, 0.07));   // very low lightness
+}
+
+// A hue-shifted sibling of the accent — gives the bars a themed multi-hue
+// sweep (accent → shifted → white) without leaving the album's palette.
+function hueShift(hex, deg) {
+  const [r, g, b] = hexToRgbArr(hex);
+  const hsl = rgbToHsl(r, g, b);
+  if (hsl[1] < 0.08) return hex;                 // grayscale accent → no shift
+  let h = (hsl[0] + deg / 360) % 1;
+  if (h < 0) h += 1;
+  const s = Math.min(0.95, Math.max(0.55, hsl[1]));
+  return rgbToHex(hslToRgb(h, s, 0.68));
 }
 
 function applyAccent(artUrl) {
