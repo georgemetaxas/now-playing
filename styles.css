@@ -102,13 +102,15 @@ body:hover { cursor: default; }
   background: linear-gradient(to bottom,
     #fff 0%, var(--accent, #fff) 30%,
     var(--accent, #fff) 70%, #fff 100%);
-  /* neon Tron bloom on the black void — scales with the bar via transform */
-  box-shadow: 0 0 5px var(--accent, #fff), 0 0 14px var(--accent, #fff);
+  /* neon Tron bloom on the dark void — scales with the bar via transform */
+  box-shadow: 0 0 6px var(--accent, #fff), 0 0 16px var(--accent, #fff),
+              0 0 34px var(--accent, #fff);
 }
 
-/* Contained view: pure black behind the art + visualiser (Tron void) */
+/* Contained view: a very dark tint of the album accent behind the art +
+   visualiser (Tron void, themed) */
 body.albumart #backdrop, body.albumart #vignette { display: none; }
-#player.albumart { background: #000; }
+#player.albumart { background: var(--accent-dark, #05060a); }
 /* don't burn cycles while the screensaver is up */
 #player:not(.visible) #eq .bar {
   -webkit-animation-play-state: paused; animation-play-state: paused;

@@ -208,7 +208,21 @@ function isPlaceholderArt(url) {
    Falls back to white if extraction fails.
    ============================================================ */
 function setAccent(hex) {
-  document.documentElement.style.setProperty("--accent", hex || "#fff");
+  const c = hex || "#fff";
+  document.documentElement.style.setProperty("--accent", c);
+  document.documentElement.style.setProperty("--accent-dark", darkTint(c));
+}
+
+// A very dark tint of the accent — used as the contained-view backdrop.
+function darkTint(hex) {
+  let h = hex;
+  if (h.length === 4) h = "#" + h[1] + h[1] + h[2] + h[2] + h[3] + h[3];
+  const r = parseInt(h.slice(1, 3), 16),
+        g = parseInt(h.slice(3, 5), 16),
+        b = parseInt(h.slice(5, 7), 16);
+  let hsl = rgbToHsl(r, g, b);
+  const s = hsl[1] < 0.08 ? 0 : Math.min(0.6, Math.max(0.32, hsl[1]));
+  return rgbToHex(hslToRgb(hsl[0], s, 0.07));   // very low lightness
 }
 
 function applyAccent(artUrl) {
