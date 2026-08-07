@@ -13,6 +13,7 @@ import colorsys
 import io
 import json
 import os
+import socket
 import sys
 import time
 import urllib.parse
@@ -44,16 +45,65 @@ def load_config():
     # env overrides (handy for secrets)
     cfg["tapo_email"] = os.environ.get("TAPO_EMAIL", cfg.get("tapo_email", "")).strip()
     cfg["tapo_password"] = os.environ.get("TAPO_PASSWORD", cfg.get("tapo_password", "")).strip()
-    cfg["strip_ip"] = str(cfg.get("strip_ip", "")).strip()
-    for key in ("tapo_email", "tapo_password", "strip_ip", "lastfm_user", "lastfm_key"):
+    for key in ("tapo_email", "tapo_password", "lastfm_user", "lastfm_key"):
         if not cfg.get(key):
             sys.exit(f"config.json is missing required field: {key}")
-    cfg.setdefault("model", "l930")
+
+    # Locations. New style: a "locations" list, one per network/strip. Legacy
+    # style: a single top-level strip_ip/model → treated as one location.
+    raw = cfg.get("locations")
+    if not raw:
+        legacy = str(cfg.get("strip_ip", "")).strip()
+        if not legacy:
+            sys.exit("config.json needs a 'locations' list (or a legacy 'strip_ip').")
+        raw = [{"name": "default", "strip_ip": legacy, "model": cfg.get("model", "l930")}]
+    locations = []
+    for loc in raw:
+        ip = str(loc.get("strip_ip", "")).strip()
+        if not ip:
+            continue
+        locations.append({
+            "name": loc.get("name", ip),
+            "strip_ip": ip,
+            "model": str(loc.get("model", cfg.get("model", "l930"))).lower(),
+            # per-location creds are optional; default to the shared account
+            "tapo_email": (loc.get("tapo_email") or cfg["tapo_email"]).strip(),
+            "tapo_password": (loc.get("tapo_password") or cfg["tapo_password"]).strip(),
+        })
+    if not locations:
+        sys.exit("config.json has no usable locations (each needs a strip_ip).")
+    cfg["locations"] = locations
+
     cfg.setdefault("poll_seconds", 8)
     cfg.setdefault("brightness", 80)
     cfg.setdefault("idle_mode", "restore")  # "restore" | "dim" | "off" | "keep"
     cfg.setdefault("idle_brightness", 15)
     return cfg
+
+
+def local_subnet():
+    """This machine's primary IPv4 /24 prefix, e.g. '192.168.0.' — used to tell
+    which location's network we're on right now (SSID isn't reliable on macOS)."""
+    try:
+        s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        s.connect(("8.8.8.8", 80))          # no packets sent; just picks the iface
+        ip = s.getsockname()[0]
+        s.close()
+        return ip.rsplit(".", 1)[0] + "."
+    except Exception:
+        return ""
+
+
+def pick_location(cfg):
+    """The location whose strip is on our current subnet, or None if we're on
+    neither known network (in which case we leave all lights alone)."""
+    prefix = local_subnet()
+    if not prefix:
+        return None
+    for loc in cfg["locations"]:
+        if loc["strip_ip"].startswith(prefix):
+            return loc
+    return None
 
 
 # ----------------------------------------------------------------------------
@@ -129,9 +179,9 @@ def dominant_color(art_url):
 # ----------------------------------------------------------------------------
 # Tapo strip control
 # ----------------------------------------------------------------------------
-async def get_device(client, cfg):
-    factory = getattr(client, cfg["model"].lower())   # l900 / l920 / l930
-    return await factory(cfg["strip_ip"])
+async def get_device_for(client, loc):
+    factory = getattr(client, loc["model"])           # l900 / l920 / l930
+    return await factory(loc["strip_ip"])
 
 
 async def set_color(device, hue, sat, brightness):
@@ -192,16 +242,39 @@ async def go_idle(device, cfg, home_state):
 # ----------------------------------------------------------------------------
 async def main():
     cfg = load_config()
-    client = ApiClient(cfg["tapo_email"], cfg["tapo_password"])
-    device = await get_device(client, cfg)
-    print(f"Connected to {cfg['model'].upper()} at {cfg['strip_ip']}. Watching {cfg['lastfm_user']}…")
+    where = ", ".join(f"{l['name']} ({l['strip_ip']})" for l in cfg["locations"])
+    print(f"Watching {cfg['lastfm_user']}. Locations: {where}")
 
+    device = None
+    active_loc = None      # the location dict we're currently connected to
     last_key = None        # last track we set a colour for
     active = False         # are we currently overriding the strip for playback?
     home_state = None      # the strip's state captured just before playback began
 
     while True:
         try:
+            desired = pick_location(cfg)
+            if desired is None:
+                # On neither known network → release the device and touch nothing.
+                if active_loc is not None:
+                    print("· off all known light networks — pausing control")
+                device = active_loc = None
+                active = False
+                last_key = None
+                await asyncio.sleep(cfg["poll_seconds"])
+                continue
+
+            # (Re)connect when we arrive on a location's network, or after an error.
+            if device is None or desired["strip_ip"] != (active_loc or {}).get("strip_ip"):
+                client = ApiClient(desired["tapo_email"], desired["tapo_password"])
+                device = await get_device_for(client, desired)
+                active_loc = desired
+                active = False
+                last_key = None
+                home_state = None
+                print(f"· at {desired['name']} → connected to "
+                      f"{desired['model'].upper()} at {desired['strip_ip']}")
+
             np = get_now_playing(cfg)
             if np:
                 if not active:
@@ -231,21 +304,13 @@ async def main():
                 active = False
                 last_key = None
                 print("· stopped → restored the strip to its previous state")
-            # Steady idle (not active): never touch the strip. This is the key
-            # fix — a light turned off in Google Home stays off, and reconnects
-            # can't turn it back on.
+            # Steady idle (not active): never touch the strip — a light turned
+            # off in Google Home stays off, and reconnects can't turn it on.
         except Exception as e:
-            # Tapo sessions expire (SessionTimeout/403) — log in again. A
-            # reconnect is NOT a playback transition, so leave `active` alone so
-            # it can never trigger a spurious restore/re-apply while idle.
-            print(f"! {type(e).__name__}: {e}  → re-authenticating", file=sys.stderr)
-            try:
-                client = ApiClient(cfg["tapo_email"], cfg["tapo_password"])
-                device = await get_device(client, cfg)
-                last_key = None       # re-apply colour next loop if still playing
-                print("· reconnected to strip")
-            except Exception as e2:
-                print(f"! reconnect failed: {e2}", file=sys.stderr)
+            # Tapo sessions expire, or the strip may be briefly unreachable.
+            # Drop the device so the next loop reconnects to the right location.
+            print(f"! {type(e).__name__}: {e}  → will reconnect", file=sys.stderr)
+            device = active_loc = None
 
         await asyncio.sleep(cfg["poll_seconds"])
 

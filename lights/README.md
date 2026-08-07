@@ -30,8 +30,9 @@ Fill in `config.json`:
 | Field | What |
 |---|---|
 | `tapo_email` / `tapo_password` | Your **TP-Link / Tapo account** login (needed even for local control on current firmware). |
-| `strip_ip` | The strip's local IP — find it in the **Tapo app → your strip → Settings (gear) → Device Info → IP Address**, or in your router's client list. Give the strip a DHCP reservation so it doesn't change. |
-| `model` | `l900`, `l920`, or `l930`. |
+| `locations` | One entry per network/strip. Each has a `name`, `strip_ip`, and `model`. The agent auto-picks the location whose strip is on the network it's currently on (by subnet), and does nothing when on neither. Optionally add per-location `tapo_email` / `tapo_password` if a strip is on a different account. |
+| `strip_ip` (per location) | The strip's local IP — **Tapo app → strip → Settings (gear) → Device Info → IP Address**, or your router's client list. Give it a DHCP reservation so it doesn't change. |
+| `model` (per location) | `l900`, `l920`, or `l930`. |
 | `lastfm_user` / `lastfm_key` | Already filled with the Now Playing defaults. |
 | `brightness` | Playing brightness, 1–100. |
 | `idle_mode` | `restore` (back to the colour set in Google Home — default), `dim` (warm low light), `off` (turn strip off), or `keep` (hold last colour). |
