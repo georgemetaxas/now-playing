@@ -52,14 +52,37 @@ Press Ctrl-C to stop.
 
 ### Keep it running automatically (launchd)
 
-A launch agent is included so the sync starts on login and restarts if it
-crashes. After `config.json` is filled in:
+Easiest: run the installer — it creates the venv, installs deps, and installs +
+loads a login agent with the right paths for this Mac (re-runnable):
+
+```bash
+cd lights && bash install.sh
+```
+
+Or manually, after `config.json` is filled in:
 
 ```bash
 # from the repo root
 cp lights/com.metaxas.nowplaying-lights.plist ~/Library/LaunchAgents/
 launchctl load ~/Library/LaunchAgents/com.metaxas.nowplaying-lights.plist
 ```
+
+### Running on a second Mac (e.g. the Hive)
+
+The agent can run on any Mac that's on the same Wi-Fi as the strip — it does
+**not** need Claude, just Python 3.8+. To set it up on another machine:
+
+```bash
+git clone https://github.com/georgemetaxas/now-playing.git
+cd now-playing/lights
+cp config.example.json config.json     # then edit: tapo login + strip IP/model
+bash install.sh
+```
+
+`install.sh` figures out the paths for that machine, so the launch agent works
+regardless of username or folder. Each machine keeps its own local `config.json`
+(secrets never leave the device). Make sure the Mac is set to **not sleep** (System
+Settings → energy) so the agent keeps running when the screen is off.
 
 Manage it:
 
