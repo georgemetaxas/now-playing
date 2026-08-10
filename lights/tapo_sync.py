@@ -13,6 +13,7 @@ import colorsys
 import io
 import json
 import os
+import re
 import socket
 import sys
 import time
@@ -135,21 +136,61 @@ def get_now_playing(cfg):
 # ----------------------------------------------------------------------------
 # Cover art lookup (iTunes hi-res, Last.fm fallback) — mirrors the web app
 # ----------------------------------------------------------------------------
+def _norm(s):
+    s = (s or "").lower()
+    s = re.sub(r"[\(\[][^\)\]]*[\)\]]", " ", s)
+    s = re.sub(r"\b(feat|ft|featuring|remaster(ed)?|radio edit|extended mix|"
+               r"original mix|deluxe|single)\b.*$", " ", s)
+    return re.sub(r"[^a-z0-9]+", " ", s).strip()
+
+
+def _artist_matches(want, got):
+    a, b = _norm(want), _norm(got)
+    if not a or not b:
+        return False
+    if a == b or a in b or b in a:
+        return True
+    t = a.split(" ")[0]
+    return len(t) >= 3 and t in b.split(" ")
+
+
+def _name_matches(want, got):
+    a, b = _norm(want), _norm(got)
+    return bool(a) and bool(b) and (a == b or a in b or b in a)
+
+
+def _itunes_search(term, entity, want_artist, want_name, is_album):
+    """First result whose artist (and name) actually match — avoids the
+    wrong-cover mismatches from taking the blind top result."""
+    try:
+        q = urllib.parse.urlencode({"term": term, "entity": entity, "limit": 8})
+        r = requests.get(f"https://itunes.apple.com/search?{q}", timeout=10)
+        for res in r.json().get("results", []):
+            if not res.get("artworkUrl100"):
+                continue
+            if not _artist_matches(want_artist, res.get("artistName", "")):
+                continue
+            name = res.get("collectionName" if is_album else "trackName", "")
+            if want_name and not _name_matches(want_name, name):
+                continue
+            return res
+    except Exception:
+        pass
+    return None
+
+
 def fetch_art_url(artist, title, album, lastfm_image):
-    clean_album = album.split(" (feat.")[0].strip() if album else ""
-    terms = [f"{artist} {title}"]
+    """Resolve the best cover: exact album (validated) → validated song →
+    Last.fm's own art (from YouTube metadata, so faithful)."""
+    clean_album = re.sub(r"\s*[\(\[](feat|ft)\.?[^\)\]]*[\)\]]", "",
+                         album or "", flags=re.I).strip()
     if clean_album:
-        terms.append(f"{artist} {clean_album}")
-    terms.append(title)
-    for term in terms:
-        try:
-            q = urllib.parse.urlencode({"term": term, "entity": "song", "limit": 1})
-            r = requests.get(f"https://itunes.apple.com/search?{q}", timeout=10)
-            results = r.json().get("results", [])
-            if results and results[0].get("artworkUrl100"):
-                return results[0]["artworkUrl100"].replace("100x100bb", "600x600bb")
-        except Exception:
-            pass
+        alb = _itunes_search(f"{artist} {clean_album}", "album", artist, clean_album, True)
+        if alb:
+            return alb["artworkUrl100"].replace("100x100bb", "600x600bb")
+    song = _itunes_search(f"{artist} {title}", "song", artist, title, False)
+    if song:
+        return song["artworkUrl100"].replace("100x100bb", "600x600bb")
     if lastfm_image and LASTFM_PLACEHOLDER not in lastfm_image:
         return lastfm_image
     return None
@@ -157,10 +198,14 @@ def fetch_art_url(artist, title, album, lastfm_image):
 
 def dominant_color(art_url):
     """Download the art and return (hue 0-360, sat 0-100) of its most vivid pixel.
-    Returns None for near-grayscale art (caller falls back to warm white)."""
-    r = requests.get(art_url, timeout=10)
-    r.raise_for_status()
-    img = Image.open(io.BytesIO(r.content)).convert("RGB").resize((40, 40))
+    Returns None for near-grayscale art or a failed download (caller falls back
+    to warm white)."""
+    try:
+        r = requests.get(art_url, timeout=10)
+        r.raise_for_status()
+        img = Image.open(io.BytesIO(r.content)).convert("RGB").resize((40, 40))
+    except Exception:
+        return None
     best, best_score = None, -1.0
     for (rr, gg, bb) in img.getdata():
         mx, mn = max(rr, gg, bb), min(rr, gg, bb)
@@ -184,13 +229,25 @@ async def get_device_for(client, loc):
     return await factory(loc["strip_ip"])
 
 
+async def _retry(coro_fn):
+    """Run an async action, retrying once after a short pause — the strip can
+    briefly reject a command mid-transition."""
+    try:
+        await coro_fn()
+    except Exception:
+        await asyncio.sleep(0.6)
+        await coro_fn()
+
+
 async def set_color(device, hue, sat, brightness):
-    await device.set().on().brightness(brightness).hue_saturation(hue, sat).send(device)
+    await _retry(lambda: device.set().on().brightness(brightness)
+                 .hue_saturation(hue, sat).send(device))
 
 
 async def set_warm_white(device, brightness):
     # low saturation amber for grayscale covers
-    await device.set().on().brightness(brightness).hue_saturation(30, 25).send(device)
+    await _retry(lambda: device.set().on().brightness(brightness)
+                 .hue_saturation(30, 25).send(device))
 
 
 async def capture_state(device):
