@@ -15,13 +15,16 @@ PY="$(command -v python3 || true)"
 echo "▸ lights folder: $DIR"
 
 if [ -z "$PY" ]; then
-  echo "✗ python3 not found. Install Python 3.8+ (brew install python, or python.org) and re-run."
+  echo "✗ python3 not found. Install Python 3.11 or 3.12 from https://www.python.org/downloads/macos/"
+  echo "  then quit + reopen Terminal and run this again."
   exit 1
 fi
 PYVER="$("$PY" -c 'import sys;print("%d.%d"%sys.version_info[:2])')"
 echo "▸ python3: $PY (v$PYVER)"
-"$PY" -c 'import sys; sys.exit(0 if sys.version_info[:2] >= (3,8) else 1)' || {
-  echo "✗ Python $PYVER is too old — need 3.8+. Install a newer Python and re-run."
+"$PY" -c 'import sys; sys.exit(0 if sys.version_info[:2] >= (3,11) else 1)' || {
+  echo "✗ Python $PYVER is too old — the Tapo library needs Python 3.11+."
+  echo "  Install Python 3.11 or 3.12 from https://www.python.org/downloads/macos/,"
+  echo "  quit + reopen Terminal, then run this again."
   exit 1
 }
 
