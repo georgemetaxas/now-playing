@@ -543,7 +543,6 @@ function openSettings() {
   els.settings.classList.remove("hidden");
 }
 
-const fsBtn = $("fs-btn");
 const docEl = document.documentElement;
 const canFullscreen = !!(docEl.requestFullscreen || docEl.webkitRequestFullscreen);
 function toggleFullscreen() {
@@ -553,12 +552,6 @@ function toggleFullscreen() {
     if (fsEl) (document.exitFullscreen || document.webkitExitFullscreen).call(document);
     else (docEl.requestFullscreen || docEl.webkitRequestFullscreen).call(docEl);
   } catch (e) {}
-}
-if (!canFullscreen) {
-  // iOS Safari has no element Fullscreen API — use "Add to Home Screen" instead
-  fsBtn.style.display = "none";
-} else {
-  fsBtn.addEventListener("click", toggleFullscreen);
 }
 // Double-click the artwork/player to toggle fullscreen (desktop)
 els.player.addEventListener("dblclick", toggleFullscreen);
