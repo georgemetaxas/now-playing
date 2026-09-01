@@ -129,6 +129,7 @@ async function showTrack(t) {
 
   const lfArt = pickImage(t.image);
   if (lfArt && !isPlaceholderArt(lfArt)) {
+    els.art.style.backgroundImage = "";
     els.art.src = lfArt;
     els.backdrop.style.backgroundImage = `url("${lfArt}")`;
     applyAccent(lfArt);
@@ -141,13 +142,12 @@ async function showTrack(t) {
 
   const art = resolved.art || "";
   if (art) {
+    els.art.style.backgroundImage = "";
     els.art.src = art;
     els.backdrop.style.backgroundImage = `url("${art}")`;
     applyAccent(art);
   } else {
-    els.art.removeAttribute("src");
-    els.backdrop.style.backgroundImage = "";
-    setAccent(null);
+    setNoArt(key);          // DJ mixes etc. — themed gradient, not a broken icon
   }
 
   let year = resolved.meta && resolved.meta.releaseDate
@@ -238,6 +238,31 @@ function hueShift(hex, deg) {
   if (h < 0) h += 1;
   const s = Math.min(0.95, Math.max(0.55, hsl[1]));
   return rgbToHex(hslToRgb(h, s, 0.68));
+}
+
+// Stable vivid colour derived from a string — gives cover-less tracks a
+// consistent look instead of a random or blank one.
+function hueColorFromString(s) {
+  let h = 0;
+  for (let i = 0; i < (s || "").length; i++) h = (h * 31 + s.charCodeAt(i)) >>> 0;
+  return rgbToHex(hslToRgb((h % 360) / 360, 0.72, 0.6));
+}
+
+// 1x1 transparent pixel — a valid src so the <img> shows no broken icon
+const TRANSPARENT_PX =
+  "data:image/gif;base64,R0lGODlhAQABAAAAACH5BAEKAAEALAAAAAABAAEAAAICTAEAOw==";
+
+// No cover found (common for DJ mixes / long uploads) — show a clean themed
+// gradient instead of a broken image, and colour the UI from the title.
+function setNoArt(seed) {
+  const c = hueColorFromString(seed || "mix");
+  setAccent(c);
+  const a2 = getComputedStyle(document.documentElement)
+               .getPropertyValue("--accent-2").trim() || c;
+  const grad = "linear-gradient(135deg, " + c + ", " + a2 + ")";
+  els.art.style.backgroundImage = grad;
+  els.art.src = TRANSPARENT_PX;      // valid pixel → no broken icon; gradient shows behind
+  els.backdrop.style.backgroundImage = grad;
 }
 
 function applyAccent(artUrl) {
@@ -559,6 +584,11 @@ els.player.addEventListener("dblclick", toggleFullscreen);
 /* ============================================================
    Boot
    ============================================================ */
+// If a cover URL fails to load, fall back to the themed gradient (no broken icon)
+els.art.addEventListener("error", () => {
+  if (view === "player" && currentKey) setNoArt(currentKey);
+});
+
 applyLayout();
 buildEq();
 toScreensaver();
