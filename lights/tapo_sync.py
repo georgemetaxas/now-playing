@@ -15,6 +15,7 @@ import json
 import os
 import re
 import socket
+import subprocess
 import sys
 import time
 import urllib.parse
@@ -67,6 +68,7 @@ def load_config():
             "name": loc.get("name", ip),
             "strip_ip": ip,
             "model": str(loc.get("model", cfg.get("model", "l930"))).lower(),
+            "mac": normmac(loc.get("mac", "")),   # optional — enables IP auto-recovery
             # per-location creds are optional; default to the shared account
             "tapo_email": (loc.get("tapo_email") or cfg["tapo_email"]).strip(),
             "tapo_password": (loc.get("tapo_password") or cfg["tapo_password"]).strip(),
@@ -105,6 +107,85 @@ def pick_location(cfg):
         if loc["strip_ip"].startswith(prefix):
             return loc
     return None
+
+
+# ---------------------------------------------------------------------------
+# IP auto-recovery: if the strip's IP changes (DHCP), find it again by MAC
+# (or any Tapo device on the subnet) so a fixed IP is never required.
+# ---------------------------------------------------------------------------
+TPLINK_OUIS = {
+    "7c:f1:7e", "50:c7:bf", "60:32:b1", "98:da:c4", "a4:2b:b0", "cc:32:e5",
+    "b0:a7:b9", "1c:61:b4", "3c:52:a1", "5c:a6:e6", "d8:0d:17", "30:de:4b",
+    "48:22:54", "54:af:97", "ac:15:a2", "e8:48:b8", "f0:a7:31", "00:31:92",
+    "9c:53:22", "b4:b0:24", "68:ff:7b", "a8:42:a1", "c0:06:c3", "10:27:f5",
+}
+
+
+def normmac(m):
+    """Lowercase, colon-separated, zero-padded MAC (macOS arp drops leading 0s)."""
+    m = (m or "").lower().replace("-", ":")
+    if not m:
+        return ""
+    return ":".join(p.zfill(2) for p in m.split(":"))
+
+
+def _ping_sweep(prefix):
+    procs = []
+    for i in range(1, 255):
+        procs.append(subprocess.Popen(
+            ["ping", "-c", "1", "-t", "1", prefix + str(i)],
+            stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL))
+    for p in procs:
+        try:
+            p.wait(timeout=2)
+        except Exception:
+            p.kill()
+
+
+def _arp_table():
+    try:
+        out = subprocess.run(["arp", "-a", "-n"], capture_output=True,
+                             text=True, timeout=8).stdout
+    except Exception:
+        return {}
+    table = {}
+    for line in out.splitlines():
+        m = re.search(r"\((\d+\.\d+\.\d+\.\d+)\) at ([0-9a-fA-F:]+)", line)
+        if m:
+            table[m.group(1)] = normmac(m.group(2))
+    return table
+
+
+def rediscover_ip(loc):
+    """Scan the current subnet and return the strip's current IP — by its MAC
+    if we know it, else the first TP-Link/Tapo device found. None if not found."""
+    prefix = local_subnet()
+    if not prefix:
+        return None
+    _ping_sweep(prefix)
+    table = _arp_table()
+    want = loc.get("mac", "")
+    if want:
+        for ip, mac in table.items():
+            if ip.startswith(prefix) and mac == want:
+                return ip
+    for ip, mac in table.items():                       # fallback: any Tapo OUI
+        if ip.startswith(prefix) and mac[:8] in TPLINK_OUIS:
+            return ip
+    return None
+
+
+def persist_ip(loc):
+    """Save a recovered IP back into config.json so restarts skip the scan."""
+    path = os.path.join(HERE, "config.json")
+    try:
+        raw = json.load(open(path))
+        for l in raw.get("locations", []):
+            if l.get("name") == loc["name"]:
+                l["strip_ip"] = loc["strip_ip"]
+        json.dump(raw, open(path, "w"), indent=2)
+    except Exception as e:
+        print(f"! could not save new IP: {e}", file=sys.stderr)
 
 
 # ----------------------------------------------------------------------------
@@ -324,7 +405,20 @@ async def main():
             # (Re)connect when we arrive on a location's network, or after an error.
             if device is None or desired["strip_ip"] != (active_loc or {}).get("strip_ip"):
                 client = ApiClient(desired["tapo_email"], desired["tapo_password"])
-                device = await get_device_for(client, desired)
+                try:
+                    device = await get_device_for(client, desired)
+                except Exception:
+                    # Can't reach it at the known IP — DHCP may have moved it.
+                    # Find it again on this subnet (by MAC, else any Tapo device).
+                    print(f"· {desired['name']} not at {desired['strip_ip']} — scanning…")
+                    new_ip = rediscover_ip(desired)
+                    if not new_ip:
+                        raise                       # give up this cycle; retry later
+                    if new_ip != desired["strip_ip"]:
+                        print(f"· {desired['name']} moved to {new_ip} — updating")
+                        desired["strip_ip"] = new_ip
+                        persist_ip(desired)
+                    device = await get_device_for(client, desired)
                 active_loc = desired
                 active = False
                 last_key = None
