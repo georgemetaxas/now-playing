@@ -12,6 +12,9 @@
 
   "locations": [
     { "name": "Home", "strip_ip": "192.168.1.50", "model": "l900", "mac": "aa:bb:cc:dd:ee:ff" },
-    { "name": "Hive", "strip_ip": "192.168.0.50", "model": "l900" }
+    { "name": "Hive", "strips": [
+        { "ip": "192.168.0.104", "model": "l900", "mac": "0c:ef:15:b8:03:88" },
+        { "ip": "192.168.0.121", "model": "l900", "mac": "58:04:4f:d2:2a:3d" }
+    ] }
   ]
 }

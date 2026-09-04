@@ -30,7 +30,7 @@ Fill in `config.json`:
 | Field | What |
 |---|---|
 | `tapo_email` / `tapo_password` | Your **TP-Link / Tapo account** login (needed even for local control on current firmware). |
-| `locations` | One entry per network/strip. Each has a `name`, `strip_ip`, and `model`. The agent auto-picks the location whose strip is on the network it's currently on (by subnet), and does nothing when on neither. Optionally add per-location `tapo_email` / `tapo_password` if a strip is on a different account. |
+| `locations` | One entry per network. Each has a `name` and either a single `strip_ip`/`model`/`mac`, or a `strips` list for **multiple strips at one location** (all get the same colour). The agent auto-picks the location whose strip(s) are on the current subnet, and does nothing when on neither. Optionally add per-location `tapo_email` / `tapo_password` if strips are on a different account. |
 | `strip_ip` (per location) | The strip's local IP — **Tapo app → strip → Settings (gear) → Device Info → IP Address**, or your router's client list. Give it a DHCP reservation so it doesn't change. |
 | `model` (per location) | `l900`, `l920`, or `l930`. |
 | `mac` (per location, optional) | The strip's MAC address. If set, the agent recovers automatically when the router gives the strip a new IP — it re-scans, finds it by MAC, reconnects, and saves the new IP. Without a MAC it still recovers by finding any Tapo device on that subnet. So a DHCP reservation is nice-to-have, not required. |

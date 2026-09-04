@@ -61,20 +61,35 @@ def load_config():
         raw = [{"name": "default", "strip_ip": legacy, "model": cfg.get("model", "l930")}]
     locations = []
     for loc in raw:
-        ip = str(loc.get("strip_ip", "")).strip()
-        if not ip:
+        # A location can have one strip (legacy strip_ip/model/mac) or many
+        # (a "strips" list). Normalise to a list of strip dicts.
+        raw_strips = loc.get("strips")
+        if not raw_strips:
+            ip = str(loc.get("strip_ip", "")).strip()
+            raw_strips = [{"ip": ip, "model": loc.get("model"),
+                           "mac": loc.get("mac", "")}] if ip else []
+        strips = []
+        for s in raw_strips:
+            sip = str(s.get("ip") or s.get("strip_ip") or "").strip()
+            if not sip:
+                continue
+            strips.append({
+                "ip": sip,
+                "model": str(s.get("model") or loc.get("model") or
+                             cfg.get("model", "l930")).lower(),
+                "mac": normmac(s.get("mac", "")),   # optional — enables IP auto-recovery
+            })
+        if not strips:
             continue
         locations.append({
-            "name": loc.get("name", ip),
-            "strip_ip": ip,
-            "model": str(loc.get("model", cfg.get("model", "l930"))).lower(),
-            "mac": normmac(loc.get("mac", "")),   # optional — enables IP auto-recovery
+            "name": loc.get("name", strips[0]["ip"]),
+            "strips": strips,
             # per-location creds are optional; default to the shared account
             "tapo_email": (loc.get("tapo_email") or cfg["tapo_email"]).strip(),
             "tapo_password": (loc.get("tapo_password") or cfg["tapo_password"]).strip(),
         })
     if not locations:
-        sys.exit("config.json has no usable locations (each needs a strip_ip).")
+        sys.exit("config.json has no usable locations (each needs a strip ip).")
     cfg["locations"] = locations
 
     cfg.setdefault("poll_seconds", 8)
@@ -104,7 +119,7 @@ def pick_location(cfg):
     if not prefix:
         return None
     for loc in cfg["locations"]:
-        if loc["strip_ip"].startswith(prefix):
+        if any(s["ip"].startswith(prefix) for s in loc["strips"]):
             return loc
     return None
 
@@ -175,17 +190,50 @@ def rediscover_ip(loc):
     return None
 
 
-def persist_ip(loc):
-    """Save a recovered IP back into config.json so restarts skip the scan."""
+def persist_strip_ip(loc_name, mac, old_ip, new_ip):
+    """Save a recovered strip IP back into config.json so restarts skip the scan."""
     path = os.path.join(HERE, "config.json")
     try:
         raw = json.load(open(path))
         for l in raw.get("locations", []):
-            if l.get("name") == loc["name"]:
-                l["strip_ip"] = loc["strip_ip"]
+            if l.get("name") != loc_name:
+                continue
+            if isinstance(l.get("strips"), list):
+                for s in l["strips"]:
+                    hit = (mac and normmac(s.get("mac", "")) == mac) or \
+                          ((s.get("ip") or s.get("strip_ip")) == old_ip)
+                    if hit:
+                        if "ip" in s or "strip_ip" not in s:
+                            s["ip"] = new_ip
+                        else:
+                            s["strip_ip"] = new_ip
+            else:
+                l["strip_ip"] = new_ip      # legacy single-strip location
         json.dump(raw, open(path, "w"), indent=2)
     except Exception as e:
         print(f"! could not save new IP: {e}", file=sys.stderr)
+
+
+async def connect_strip(client, strip, loc_name):
+    """Connect to a strip; if unreachable at its known IP, rediscover it on the
+    subnet (by MAC, else any Tapo device), update + persist the IP. Returns the
+    device, or None if it can't be reached."""
+    try:
+        return await get_device_for(client, strip)
+    except Exception:
+        old = strip["ip"]
+        print(f"· {loc_name} strip not at {old} — scanning…")
+        new_ip = rediscover_ip(strip)
+        if not new_ip:
+            return None
+        if new_ip != old:
+            print(f"· {loc_name} strip moved to {new_ip} — updating")
+            strip["ip"] = new_ip
+            persist_strip_ip(loc_name, strip["mac"], old, new_ip)
+        try:
+            return await get_device_for(client, strip)
+        except Exception:
+            return None
 
 
 # ----------------------------------------------------------------------------
@@ -305,9 +353,9 @@ def dominant_color(art_url):
 # ----------------------------------------------------------------------------
 # Tapo strip control
 # ----------------------------------------------------------------------------
-async def get_device_for(client, loc):
-    factory = getattr(client, loc["model"])           # l900 / l920 / l930
-    return await factory(loc["strip_ip"])
+async def get_device_for(client, strip):
+    factory = getattr(client, strip["model"])         # l900 / l920 / l930
+    return await factory(strip["ip"])
 
 
 async def _retry(coro_fn):
@@ -380,58 +428,57 @@ async def go_idle(device, cfg, home_state):
 # ----------------------------------------------------------------------------
 async def main():
     cfg = load_config()
-    where = ", ".join(f"{l['name']} ({l['strip_ip']})" for l in cfg["locations"])
+    where = ", ".join(
+        f"{l['name']} (" + ", ".join(s['ip'] for s in l['strips']) + ")"
+        for l in cfg["locations"])
     print(f"Watching {cfg['lastfm_user']}. Locations: {where}")
 
-    device = None
-    active_loc = None      # the location dict we're currently connected to
+    client = None
+    active_loc = None      # the location dict we're currently at
+    units = []             # per-strip runtime: [{cfg, device, home}, ...]
     last_key = None        # last track we set a colour for
-    active = False         # are we currently overriding the strip for playback?
-    home_state = None      # the strip's state captured just before playback began
+    active = False         # are we currently overriding the strips for playback?
 
     while True:
         try:
             desired = pick_location(cfg)
             if desired is None:
-                # On neither known network → release the device and touch nothing.
+                # On neither known network → release everything and touch nothing.
                 if active_loc is not None:
                     print("· off all known light networks — pausing control")
-                device = active_loc = None
+                active_loc = None
+                units = []
                 active = False
                 last_key = None
                 await asyncio.sleep(cfg["poll_seconds"])
                 continue
 
-            # (Re)connect when we arrive on a location's network, or after an error.
-            if device is None or desired["strip_ip"] != (active_loc or {}).get("strip_ip"):
+            # Arrived at a location → build the per-strip runtime list.
+            if active_loc is None or active_loc["name"] != desired["name"]:
                 client = ApiClient(desired["tapo_email"], desired["tapo_password"])
-                try:
-                    device = await get_device_for(client, desired)
-                except Exception:
-                    # Can't reach it at the known IP — DHCP may have moved it.
-                    # Find it again on this subnet (by MAC, else any Tapo device).
-                    print(f"· {desired['name']} not at {desired['strip_ip']} — scanning…")
-                    new_ip = rediscover_ip(desired)
-                    if not new_ip:
-                        raise                       # give up this cycle; retry later
-                    if new_ip != desired["strip_ip"]:
-                        print(f"· {desired['name']} moved to {new_ip} — updating")
-                        desired["strip_ip"] = new_ip
-                        persist_ip(desired)
-                    device = await get_device_for(client, desired)
+                units = [{"cfg": s, "device": None, "home": None} for s in desired["strips"]]
                 active_loc = desired
                 active = False
                 last_key = None
-                home_state = None
-                print(f"· at {desired['name']} → connected to "
-                      f"{desired['model'].upper()} at {desired['strip_ip']}")
+
+            # Ensure each strip is connected (rediscovers a moved IP on failure).
+            for u in units:
+                if u["device"] is None:
+                    u["device"] = await connect_strip(client, u["cfg"], desired["name"])
+                    if u["device"] is not None:
+                        print(f"· at {desired['name']} → connected to "
+                              f"{u['cfg']['model'].upper()} at {u['cfg']['ip']}")
+            live = [u for u in units if u["device"] is not None]
+            if not live:
+                await asyncio.sleep(cfg["poll_seconds"])
+                continue
 
             np = get_now_playing(cfg)
             if np:
                 if not active:
-                    # idle → playing: snapshot the current state (colour, white,
-                    # or OFF) so we can put it back exactly when playback stops.
-                    home_state = await capture_state(device)
+                    # idle → playing: snapshot each strip's current state.
+                    for u in live:
+                        u["home"] = await capture_state(u["device"])
                     active = True
                     last_key = None
 
@@ -441,27 +488,36 @@ async def main():
                     last_key = key
                     art = fetch_art_url(artist, title, album, lf_img)
                     color = dominant_color(art) if art else None
+                    for u in live:
+                        try:
+                            if color:
+                                await set_color(u["device"], color[0], color[1], cfg["brightness"])
+                            else:
+                                await set_warm_white(u["device"], cfg["brightness"])
+                        except Exception:
+                            u["device"] = None      # drop; reconnect next loop
                     if color:
-                        hue, sat = color
-                        await set_color(device, hue, sat, cfg["brightness"])
-                        print(f"♪ {key}  →  hue {hue}°, sat {sat}%")
+                        print(f"♪ {key}  →  hue {color[0]}°, sat {color[1]}%  ({len(live)} strip(s))")
                     else:
-                        await set_warm_white(device, cfg["brightness"])
-                        print(f"♪ {key}  →  warm white (no vivid colour)")
+                        print(f"♪ {key}  →  warm white  ({len(live)} strip(s))")
             elif active:
-                # playing → idle: restore the pre-playback state ONCE (its
-                # colour, or OFF if it was off), then leave the strip alone.
-                await go_idle(device, cfg, home_state)
+                # playing → idle: restore each strip's pre-playback state ONCE.
+                for u in live:
+                    try:
+                        await go_idle(u["device"], cfg, u["home"])
+                    except Exception:
+                        u["device"] = None
                 active = False
                 last_key = None
-                print("· stopped → restored the strip to its previous state")
-            # Steady idle (not active): never touch the strip — a light turned
-            # off in Google Home stays off, and reconnects can't turn it on.
+                print("· stopped → restored the strips to their previous state")
+            # Steady idle (not active): never touch the strips.
         except Exception as e:
-            # Tapo sessions expire, or the strip may be briefly unreachable.
-            # Drop the device so the next loop reconnects to the right location.
+            # Tapo sessions expire, or a strip may be briefly unreachable — drop
+            # the devices so the next loop reconnects (never disturbs `active`
+            # while idle, so lights turned off in Google Home stay off).
             print(f"! {type(e).__name__}: {e}  → will reconnect", file=sys.stderr)
-            device = active_loc = None
+            for u in units:
+                u["device"] = None
 
         await asyncio.sleep(cfg["poll_seconds"])
 
